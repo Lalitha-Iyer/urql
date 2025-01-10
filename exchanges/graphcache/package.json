@@ -72,6 +72,7 @@
   },
   "devDependencies": {
     "@cypress/react": "^8.0.2",
+    "@types/relay-runtime": "^18.2.3",
     "@urql/core": "workspace:*",
     "@urql/exchange-execute": "workspace:*",
     "@urql/introspection": "workspace:*",
@@ -79,7 +80,7 @@
     "graphql": "^16.6.0",
     "react": "^17.0.1",
     "react-dom": "^17.0.1",
-    "urql": "workspace:*"
+    "urql": "link:/Users/liyer/urql"
   },
   "publishConfig": {
     "access": "public",

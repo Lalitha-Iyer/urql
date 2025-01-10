@@ -11,18 +11,35 @@ import type { FormattedNode } from '@urql/core';
 import { getName, getDirectives } from './node';
 import { invariant } from '../helpers/help';
 import type { Fragments, Variables } from '../types';
+import type { ReaderFragment, NormalizationOperation } from 'relay-runtime';
+
+export type RelayNode = {
+  default: {
+    kind: 'Request';
+    fragment: ReaderFragment;
+    operation: NormalizationOperation;
+  };
+};
 
 function getMainOperation(
   doc: FormattedNode<DocumentNode>
-): FormattedNode<OperationDefinitionNode>;
+): FormattedNode<OperationDefinitionNode> | RelayNode;
 function getMainOperation(doc: DocumentNode): OperationDefinitionNode;
 
 /** Returns the main operation's definition */
-function getMainOperation(doc: DocumentNode): OperationDefinitionNode {
-  for (let i = 0; i < doc.definitions.length; i++) {
-    if (doc.definitions[i].kind === Kind.OPERATION_DEFINITION) {
-      return doc.definitions[i] as FormattedNode<OperationDefinitionNode>;
+function getMainOperation(
+  doc: DocumentNode | RelayNode
+): OperationDefinitionNode | RelayNode {
+  if ('definitions' in doc) {
+    for (let i = 0; i < doc.definitions.length; i++) {
+      for (let i = 0; i < doc.definitions.length; i++) {
+        if (doc.definitions[i].kind === Kind.OPERATION_DEFINITION) {
+          return doc.definitions[i] as FormattedNode<OperationDefinitionNode>;
+        }
+      }
     }
+  } else {
+    return doc;
   }
 
   invariant(
@@ -38,6 +55,9 @@ export { getMainOperation };
 /** Returns a mapping from fragment names to their selections */
 export const getFragments = (doc: FormattedNode<DocumentNode>): Fragments => {
   const fragments: Fragments = {};
+  if (!doc.definitions) {
+    return {};
+  }
   for (let i = 0; i < doc.definitions.length; i++) {
     const node = doc.definitions[i];
     if (node.kind === Kind.FRAGMENT_DEFINITION) {

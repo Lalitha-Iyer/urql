@@ -86,7 +86,13 @@ export const _query = (
 ): QueryResult => {
   const query = formatDocument(request.query);
   const operation = getMainOperation(query);
-  const rootKey = store.rootFields[operation.operation];
+  let rootKey;
+  if ('operation' in operation) {
+    rootKey = store.rootFields[operation.operation];
+  } else {
+    // Relay
+    rootKey = operation.default.fragment.type;
+  }
   const rootSelect = getSelectionSet(operation);
 
   const ctx = makeContext(

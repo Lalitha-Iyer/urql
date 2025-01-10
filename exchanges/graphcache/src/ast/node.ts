@@ -9,6 +9,8 @@ import type {
 } from '@0no-co/graphql.web';
 
 import type { FormattedNode } from '@urql/core';
+import type { RelayNode } from './traversal';
+import type { NormalizationSelection } from 'relay-runtime';
 
 export type SelectionSet = readonly FormattedNode<SelectionNode>[];
 
@@ -32,12 +34,24 @@ export const getFieldAlias = (node: FieldNode): string =>
 const emptySelectionSet: SelectionSet = [];
 
 /** Returns the SelectionSet for a given inline or defined fragment node */
-export const getSelectionSet = (node: {
-  selectionSet?: FormattedNode<SelectionSetNode>;
-}): FormattedNode<SelectionSet> =>
-  (node.selectionSet
-    ? node.selectionSet.selections
-    : emptySelectionSet) as FormattedNode<SelectionSet>;
+export const getSelectionSet = (
+  node:
+    | {
+        selectionSet?: FormattedNode<SelectionSetNode>;
+      }
+    | RelayNode
+):
+  | FormattedNode<SelectionSet>
+  | readonly NormalizationSelection[]
+  | undefined => {
+  if ('selectionSet' in node) {
+    return (
+      node.selectionSet ? node.selectionSet.selections : emptySelectionSet
+    ) as FormattedNode<SelectionSet>;
+  } else if ('default' in node) {
+    return node.default.operation.selections;
+  }
+};
 
 export const getTypeCondition = (node: {
   typeCondition?: NamedTypeNode;
