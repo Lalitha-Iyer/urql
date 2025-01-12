@@ -8,14 +8,16 @@ import { valueFromASTUntyped } from '@0no-co/graphql.web';
 import { getName } from './node';
 
 import type { Variables } from '../types';
+import type { NormalizationLinkedField } from 'relay-runtime';
+import { getArgumentValues } from './variablesRelay';
 
 /** Evaluates a fields arguments taking vars into account */
 export const getFieldArguments = (
-  node: FieldNode | DirectiveNode,
+  node: FieldNode | DirectiveNode | NormalizationLinkedField,
   vars: Variables
 ): null | Variables => {
   let args: null | Variables = null;
-  if (node.arguments) {
+  if ('arguments' in node && node.arguments) {
     for (let i = 0, l = node.arguments.length; i < l; i++) {
       const arg = node.arguments[i];
       const value = valueFromASTUntyped(arg.value, vars);
@@ -24,6 +26,8 @@ export const getFieldArguments = (
         args[getName(arg)] = value as any;
       }
     }
+  } else if ('args' in node && node.args) {
+    args = getArgumentValues(node.args, vars);
   }
   return args;
 };
