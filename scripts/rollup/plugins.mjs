@@ -79,7 +79,7 @@ export const makeOutputPlugins = ({ isProduction, extension }) => {
       }),
     cjsCheck({ extension }),
     cleanup(),
-    isProduction ? terserMinified : extension !== '.js' ? terserPretty : null,
+    isProduction ? terserMinified : extension !== '.js' ? null : null,
     isProduction &&
       settings.isAnalyze &&
       visualizer({
@@ -110,12 +110,8 @@ const terserPretty = terser({
     conditionals: false,
     join_vars: false,
   },
-  mangle: {
-    module: true,
-    keep_fnames: true,
-  },
   output: {
-    comments: false,
+    comments: true,
     beautify: true,
     braces: true,
     indent_level: 2,

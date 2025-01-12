@@ -160,6 +160,10 @@ const isFragmentHeuristicallyMatching = (
   });
 };
 
+function isField(select) {
+  return select.kind == Kind.FIELD || select.kind == 'LinkedField';
+}
+
 export class SelectionIterator {
   typename: undefined | string;
   entityKey: string;
@@ -218,7 +222,7 @@ export class SelectionIterator {
         const select = state.selectionSet[state.index++];
         if (!shouldInclude(select, this.ctx.variables)) {
           /*noop*/
-        } else if (select.kind !== Kind.FIELD) {
+        } else if (!isField(select)) {
           // A fragment is either referred to by FragmentSpread or inline
           const fragment =
             select.kind !== Kind.INLINE_FRAGMENT
@@ -279,6 +283,9 @@ export class SelectionIterator {
         } else if (currentOperation === 'write' || !select._generated) {
           deferRef = state.defer;
           optionalRef = state.optional;
+          return select;
+        } else {
+          // Relay artifact
           return select;
         }
       }
