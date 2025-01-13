@@ -10,6 +10,7 @@ import { getName } from './node';
 import type { Variables } from '../types';
 import type { NormalizationLinkedField } from 'relay-runtime';
 import { getArgumentValues } from './variablesRelay';
+import type { RelayNode } from './traversal';
 
 /** Evaluates a fields arguments taking vars into account */
 export const getFieldArguments = (
@@ -34,22 +35,26 @@ export const getFieldArguments = (
 
 /** Returns a filtered form of variables with values missing that the query doesn't require */
 export const filterVariables = (
-  node: OperationDefinitionNode,
+  node: OperationDefinitionNode | RelayNode,
   input: void | object
 ) => {
-  if (!input || !node.variableDefinitions) {
+  if ('default' in node && node.default) {
+    return input;
+  }
+  if ('variableDefinitions' in node && (!input || !node.variableDefinitions)) {
     return undefined;
   }
-
   const vars = {};
-  for (let i = 0, l = node.variableDefinitions.length; i < l; i++) {
-    const name = getName(node.variableDefinitions[i].variable);
-    vars[name] = input[name];
+
+  if ('variableDefinitions' in node && node.variableDefinitions) {
+    for (let i = 0, l = node.variableDefinitions.length; i < l; i++) {
+      const name = getName(node.variableDefinitions[i].variable);
+      vars[name] = input[name];
+    }
+
+    return vars;
   }
-
-  return vars;
 };
-
 /** Returns a normalized form of variables with defaulted values */
 export const normalizeVariables = (
   node: OperationDefinitionNode,
