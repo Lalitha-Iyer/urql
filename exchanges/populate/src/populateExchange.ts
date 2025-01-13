@@ -135,6 +135,7 @@ export const populateExchange =
         return op;
       }
 
+      //@ts-expect-error Lalitha
       const document = traverse(op.query, node => {
         if (node.kind === Kind.FIELD) {
           if (!node.directives) return;
@@ -444,7 +445,9 @@ export const populateExchange =
       parsedOperations.add(key);
       currentVariables = variables || {};
 
+      //@ts-expect-error
       for (let i = query.definitions.length; i--; ) {
+        //@ts-expect-error
         const definition = query.definitions[i];
 
         if (definition.kind === Kind.FRAGMENT_DEFINITION) {

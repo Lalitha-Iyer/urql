@@ -159,6 +159,7 @@ export const persistedExchange =
 
       const sha256Hash = await hashFn(
         stringifyDocument(operation.query),
+        //@ts-expect-error Lalitha
         operation.query
       );
       if (sha256Hash) {

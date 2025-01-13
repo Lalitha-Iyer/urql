@@ -8,6 +8,7 @@ import { Kind } from '@0no-co/graphql.web';
 import type { KeyedDocumentNode } from './request';
 import { keyDocument } from './request';
 import type { FormattedNode, TypedDocumentNode } from '../types';
+import type { RelayNode } from 'exchanges/graphcache/src/ast';
 
 const formatNode = <
   T extends SelectionNode | DefinitionNode | TypedDocumentNode<any, any>,
@@ -103,9 +104,12 @@ const formattedDocs: Map<number, KeyedDocumentNode> = new Map<
  * @see {@link https://spec.graphql.org/October2021/#sec-Type-Name-Introspection} for more information
  * on typename introspection via the `__typename` field.
  */
-export const formatDocument = <T extends TypedDocumentNode<any, any>>(
+export const formatDocument = <
+  T extends TypedDocumentNode<any, any> | RelayNode,
+>(
   node: T
 ): FormattedNode<T> => {
+  // @ts-expect-error Lalitha
   const query = keyDocument(node);
 
   let result = formattedDocs.get(query.__key);

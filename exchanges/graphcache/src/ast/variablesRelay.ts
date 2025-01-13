@@ -61,5 +61,6 @@ export function getArgumentValues(
       values[arg.name] = getArgumentValue(arg, variables);
     });
   }
+
   return values;
 }

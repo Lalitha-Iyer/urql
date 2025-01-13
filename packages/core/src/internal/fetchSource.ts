@@ -179,7 +179,8 @@ async function* fetchOperation(
     yield await Promise.resolve();
 
     response = await (operation.context.fetch || fetch)(url, fetchOptions);
-    const contentType = response.headers.get('Content-Type') || '';
+    const contentType =
+      (response.headers && response.headers.get('Content-Type')) || '';
 
     let results: AsyncIterable<ExecutionResult>;
     if (/multipart\/mixed/i.test(contentType)) {

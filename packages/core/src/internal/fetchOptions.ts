@@ -5,7 +5,13 @@ import {
   extractFiles,
 } from '../utils';
 
-import type { AnyVariables, GraphQLRequest, Operation } from '../types';
+import type {
+  AnyVariables,
+  GraphQLRequest,
+  Operation,
+  PersistedDocument,
+} from '../types';
+import type { DocumentNode } from 'graphql';
 
 /** Abstract definition of the JSON data sent during GraphQL HTTP POST requests. */
 export interface FetchBody {
@@ -29,26 +35,39 @@ export function makeFetchBody<
     query: undefined,
     documentId: undefined,
     operationName: getOperationName(request.query),
-    variables: request.variables || undefined,
+    variables: request.variables || {},
     extensions: request.extensions,
   };
-
-  if (
-    'documentId' in request.query &&
-    request.query.documentId &&
-    // NOTE: We have to check that the document will definitely be sent
-    // as a persisted document to avoid breaking changes
-    (!request.query.definitions || !request.query.definitions.length)
-  ) {
-    body.documentId = request.query.documentId;
-  } else if (
-    !request.extensions ||
-    !request.extensions.persistedQuery ||
-    !!request.extensions.persistedQuery.miss
-  ) {
-    body.query = stringifyDocument(request.query);
+  if ('default' in request.query && request.query.default) {
+    body.query = request.query.default.params.text;
+    if (request.query.default.params.providedVariables) {
+      for (const [key, value] of Object.entries(
+        request.query.default.params.providedVariables
+      )) {
+        if (body.variables) {
+          body.variables[key] = value.get();
+        }
+      }
+    } else if (
+      'definitions' in request.query &&
+      'documentId' in request.query &&
+      request.query.documentId &&
+      // NOTE: We have to check that the document will definitely be sent
+      // as a persisted document to avoid breaking changes
+      (!request.query.definitions ||
+        !(request.query as unknown as PersistedDocument).definitions.length)
+    ) {
+      body.documentId = (
+        request.query as unknown as PersistedDocument
+      ).documentId;
+    } else if (
+      !request.extensions ||
+      !request.extensions.persistedQuery ||
+      !!request.extensions.persistedQuery.miss
+    ) {
+      body.query = stringifyDocument(request.query as unknown as DocumentNode);
+    }
   }
-
   return body;
 }
 

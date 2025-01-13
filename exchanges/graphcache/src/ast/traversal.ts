@@ -18,13 +18,20 @@ export type RelayNode = {
     kind: 'Request';
     fragment: ReaderFragment;
     operation: NormalizationOperation;
+    hash: string;
+    params: {
+      text: string;
+      providedVariables: Object;
+    };
   };
 };
 
 function getMainOperation(
   doc: FormattedNode<DocumentNode>
 ): FormattedNode<OperationDefinitionNode> | RelayNode;
-function getMainOperation(doc: DocumentNode): OperationDefinitionNode;
+function getMainOperation(
+  doc: DocumentNode | RelayNode
+): OperationDefinitionNode;
 
 /** Returns the main operation's definition */
 function getMainOperation(

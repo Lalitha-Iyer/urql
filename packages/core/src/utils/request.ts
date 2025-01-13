@@ -3,7 +3,6 @@ import type { DocumentNode, DefinitionNode } from './graphql';
 import type { HashValue } from './hash';
 import { phash } from './hash';
 import { stringifyVariables } from './variables';
-
 import type {
   DocumentInput,
   TypedDocumentNode,
@@ -16,6 +15,7 @@ type PersistedDocumentNode = TypedDocumentNode & {
   documentId?: string;
 };
 
+import type { RelayNode } from '../../../../exchanges/graphcache/src/ast/traversal';
 /** A `DocumentNode` annotated with its hashed key.
  * @internal
  */
@@ -58,17 +58,24 @@ const docs: Map<HashValue, KeyedDocumentNode> = new Map<
  * output by modifying the `loc.source.body` property on the GraphQL node.
  */
 export const stringifyDocument = (
-  node: string | DefinitionNode | DocumentNode
+  node: string | DefinitionNode | DocumentNode | RelayNode
 ): string => {
   let printed: string;
   if (typeof node === 'string') {
     printed = sanitizeDocument(node);
+    //@ts-expect-error Lalitha
   } else if (node.loc && docs.get((node as KeyedDocumentNode).__key) === node) {
     printed = node.loc.source.body;
   } else {
+    //@ts-expect-error Lalitha
+
     printed = prints.get(node) || sanitizeDocument(print(node));
+    //@ts-expect-error Lalitha
+
     prints.set(node, printed);
   }
+
+  //@ts-expect-error Lalitha
 
   if (typeof node !== 'string' && !node.loc) {
     (node as any).loc = {
@@ -98,13 +105,15 @@ export const stringifyDocument = (
  * the resulting hash should account for only one at a time.
  */
 const hashDocument = (
-  node: string | DefinitionNode | DocumentNode
+  node: string | DefinitionNode | DocumentNode | RelayNode
 ): HashValue => {
   let key: HashValue;
-  if ((node as PersistedDocumentNode).documentId) {
+  if ((node as RelayNode).default) {
+    key = (node as RelayNode).default.hash as unknown as HashValue;
+  } else if ((node as PersistedDocumentNode).documentId) {
     key = phash((node as PersistedDocumentNode).documentId!);
   } else {
-    key = phash(stringifyDocument(node));
+    key = phash(stringifyDocument(node as string | DocumentNode));
     // Add the operation name to the produced hash
     if ((node as DocumentNode).definitions) {
       const operationName = getOperationName(node as DocumentNode);
@@ -179,11 +188,18 @@ export const createRequest = <
  * @param query - A {@link DocumentNode}
  * @returns the operation's name contained within the document, or `undefined`
  */
-export const getOperationName = (query: DocumentNode): string | undefined => {
-  for (let i = 0, l = query.definitions.length; i < l; i++) {
-    const node = query.definitions[i];
-    if (node.kind === Kind.OPERATION_DEFINITION) {
-      return node.name ? node.name.value : undefined;
+export const getOperationName = (
+  query: DocumentNode | RelayNode
+): string | undefined => {
+  if ('default' in query && query.default) {
+    return query.default.fragment.name;
+  }
+  if ('definitions' in query) {
+    for (let i = 0, l = query.definitions.length; i < l; i++) {
+      const node = query.definitions[i];
+      if (node.kind === Kind.OPERATION_DEFINITION) {
+        return node.name ? node.name.value : undefined;
+      }
     }
   }
 };
@@ -192,11 +208,18 @@ export const getOperationName = (query: DocumentNode): string | undefined => {
  * @param query - A {@link DocumentNode}
  * @returns the operation's type contained within the document, or `undefined`
  */
-export const getOperationType = (query: DocumentNode): string | undefined => {
-  for (let i = 0, l = query.definitions.length; i < l; i++) {
-    const node = query.definitions[i];
-    if (node.kind === Kind.OPERATION_DEFINITION) {
-      return node.operation;
+export const getOperationType = (
+  query: DocumentNode | RelayNode
+): string | undefined => {
+  if ('default' in query && query.default) {
+    return query.default.fragment.type === 'Query' ? 'query' : 'mutation';
+  }
+  if ('definitions' in query) {
+    for (let i = 0, l = query.definitions.length; i < l; i++) {
+      const node = query.definitions[i];
+      if (node.kind === Kind.OPERATION_DEFINITION) {
+        return node.operation;
+      }
     }
   }
 };

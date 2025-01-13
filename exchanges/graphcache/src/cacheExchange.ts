@@ -220,6 +220,8 @@ export const cacheExchange =
       initDataState('read', store.data, undefined, false, false);
       const result = _query(
         store,
+        //@ts-expect-error Lalitha
+
         operation,
         results.get(operation.key),
         undefined
@@ -270,6 +272,8 @@ export const cacheExchange =
         initDataState('write', store.data, operation.key, false, false);
         const writeDependencies = _write(
           store,
+          //@ts-expect-error Lalitha
+
           operation,
           data,
           result.error
@@ -287,6 +291,8 @@ export const cacheExchange =
         );
         const queryResult = _query(
           store,
+          //@ts-expect-error Lalitha
+
           operation,
           prevData || data,
           result.error

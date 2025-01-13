@@ -200,14 +200,17 @@ export class Store<
     updater: (data: T | null) => T | null
   ): void {
     const request = createRequest(input.query, input.variables!);
+    // @ts-expect-error Lalitha
     const output = updater(this.readQuery(request));
     if (output !== null) {
+      //@ts-expect-error
       _write(this, request, output as any, undefined);
     }
   }
 
   readQuery<T = Data, V = Variables>(input: QueryInput<T, V>): T | null {
     const request = createRequest(input.query, input.variables!);
+    // @ts-expect-error Lalitha
     return _query(this, request, undefined, undefined).data as T | null;
   }
 
