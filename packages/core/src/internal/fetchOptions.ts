@@ -48,25 +48,25 @@ export function makeFetchBody<
           body.variables[key] = value.get();
         }
       }
-    } else if (
-      'definitions' in request.query &&
-      'documentId' in request.query &&
-      request.query.documentId &&
-      // NOTE: We have to check that the document will definitely be sent
-      // as a persisted document to avoid breaking changes
-      (!request.query.definitions ||
-        !(request.query as unknown as PersistedDocument).definitions.length)
-    ) {
-      body.documentId = (
-        request.query as unknown as PersistedDocument
-      ).documentId;
-    } else if (
-      !request.extensions ||
-      !request.extensions.persistedQuery ||
-      !!request.extensions.persistedQuery.miss
-    ) {
-      body.query = stringifyDocument(request.query as unknown as DocumentNode);
     }
+  } else if (
+    'definitions' in request.query &&
+    'documentId' in request.query &&
+    request.query.documentId &&
+    // NOTE: We have to check that the document will definitely be sent
+    // as a persisted document to avoid breaking changes
+    (!request.query.definitions ||
+      !(request.query as unknown as PersistedDocument).definitions.length)
+  ) {
+    body.documentId = (
+      request.query as unknown as PersistedDocument
+    ).documentId;
+  } else if (
+    !request.extensions ||
+    !request.extensions.persistedQuery ||
+    !!request.extensions.persistedQuery.miss
+  ) {
+    body.query = stringifyDocument(request.query as unknown as DocumentNode);
   }
   return body;
 }
