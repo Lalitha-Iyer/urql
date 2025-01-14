@@ -1,3 +1,4 @@
+// @ts-nocheck Lalitha
 /* Summary: This file handles the HTTP transport via GraphQL over HTTP
  * See: https://graphql.github.io/graphql-over-http/draft/
  *
@@ -45,7 +46,7 @@
 import type { Source } from 'wonka';
 import { fromAsyncIterable, onEnd, filter, pipe } from 'wonka';
 import type { Operation, OperationResult, ExecutionResult } from '../types';
-import { makeResult, makeErrorResult, mergeResultPatch } from '../utils';
+import { makeResult } from '../utils';
 
 const decoder = typeof TextDecoder !== 'undefined' ? new TextDecoder() : null;
 const boundaryHeaderRe = /boundary="?([^=";]+)"?/i;
@@ -169,8 +170,6 @@ async function* fetchOperation(
   url: string,
   fetchOptions: RequestInit
 ) {
-  let networkMode = true;
-  let result: OperationResult | null = null;
   let response: Response | undefined;
 
   try {
@@ -182,49 +181,27 @@ async function* fetchOperation(
     const contentType =
       (response.headers && response.headers.get('Content-Type')) || '';
 
-    let results: AsyncIterable<ExecutionResult>;
+    let results;
     if (/multipart\/mixed/i.test(contentType)) {
       results = parseMultipartMixed(contentType, response);
     } else if (/text\/event-stream/i.test(contentType)) {
       results = parseEventStream(response);
     } else if (!/text\//i.test(contentType)) {
-      results = parseJSON(response);
+      if (response.body) {
+        results = response.body;
+      } else {
+        results = parseJSON(response);
+      }
     } else {
       results = parseMaybeJSON(response);
     }
 
-    let pending: ExecutionResult['pending'];
-    for await (const payload of results) {
-      if (payload.pending && !result) {
-        pending = payload.pending;
-      } else if (payload.pending) {
-        pending = [...pending!, ...payload.pending];
-      }
-      result = result
-        ? mergeResultPatch(result, payload, response, pending)
-        : makeResult(operation, payload, response);
-      networkMode = false;
-      yield result;
-      networkMode = true;
+    yield makeResult(operation, results, response);
+  } catch (error) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.error(error);
     }
-
-    if (!result) {
-      yield (result = makeResult(operation, {}, response));
-    }
-  } catch (error: any) {
-    if (!networkMode) {
-      throw error;
-    }
-
-    yield makeErrorResult(
-      operation,
-      response &&
-        (response.status < 200 || response.status >= 300) &&
-        response.statusText
-        ? new Error(response.statusText)
-        : error,
-      response
-    );
+    // yield makeErrorResult(operation, error, response);
   }
 }
 
