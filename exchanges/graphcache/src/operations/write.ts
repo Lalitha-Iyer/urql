@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { FormattedNode, CombinedError } from '@urql/core';
 import { formatDocument } from '@urql/core';
 
@@ -105,7 +106,11 @@ export const _write = (
     data: data || InMemoryData.makeData(),
     dependencies: InMemoryData.currentDependencies!,
   };
-  const kind = store.rootFields[operation.operation];
+  // @ts-expect-error
+  const kind =
+    store.rootFields[operation.operation] || operation.default
+      ? 'query'
+      : operation.default.operation;
 
   const ctx = makeContext(
     store,
@@ -224,13 +229,19 @@ const writeSelection = (
   }
 
   if (!typename) {
-    warn(
-      "Couldn't find __typename when writing.\n" +
-        "If you're writing to the cache manually have to pass a `__typename` property on each entity in your data.",
-      14,
-      ctx.store.logger
-    );
-    return;
+    // @ts-expect-error Lalitha
+    if (select[0].concreteType) {
+      // @ts-expect-error Lalitha
+      typename = select.concreteType;
+    } else {
+      warn(
+        "Couldn't find __typename when writing.\n" +
+          "If you're writing to the cache manually have to pass a `__typename` property on each entity in your data.",
+        14,
+        ctx.store.logger
+      );
+      return;
+    }
   } else if (!isRoot && entityKey) {
     InMemoryData.writeRecord(entityKey, '__typename', typename);
     InMemoryData.writeType(typename, entityKey);

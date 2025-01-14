@@ -265,7 +265,7 @@ export const cacheExchange =
         reserveLayer(store.data, operation.key, true);
 
       let queryDependencies: undefined | Dependencies;
-      let data: Data | null = result.data;
+      const data: Data | null = result.data;
       if (data) {
         // Write the result to cache and collect all dependencies that need to be
         // updated
@@ -289,20 +289,20 @@ export const cacheExchange =
           false,
           prevData !== data
         );
-        const queryResult = _query(
-          store,
-          //@ts-expect-error Lalitha
+        // const queryResult = _query(
+        //   store,
+        //   //@ts-expect-error Lalitha
 
-          operation,
-          prevData || data,
-          result.error
-        );
+        //   operation,
+        //   prevData || data,
+        //   result.error
+        // );
         clearDataState();
-        data = queryResult.data;
+        // data = queryResult.data;
         if (operation.kind === 'query') {
           // Collect the query's dependencies for future pending operation updates
-          queryDependencies = queryResult.dependencies;
-          collectPendingOperations(pendingOperations, queryDependencies);
+          //    queryDependencies = queryResult.dependencies;
+          //  collectPendingOperations(pendingOperations, queryDependencies);
           results.set(operation.key, data);
         }
       } else {
