@@ -222,6 +222,21 @@ export class SelectionIterator {
         const select = state.selectionSet[state.index++];
         if (!shouldInclude(select, this.ctx.variables)) {
           /*noop*/
+        }
+        // Relay artifact
+        else if (select.kind === 'Condition') {
+          const { passingValue, condition, selections } =
+            select as NormalizationCondition;
+          if (this.ctx.variables[condition] === passingValue) {
+            this.stack.push(
+              (state = {
+                selectionSet: selections,
+                index: 0,
+                defer: state.defer,
+                optional: state.optional,
+              })
+            );
+          }
         } else if (!isField(select)) {
           // A fragment is either referred to by FragmentSpread or inline
           const fragment =

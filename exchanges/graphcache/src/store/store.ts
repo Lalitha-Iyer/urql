@@ -98,6 +98,7 @@ export class Store<
       [queryName]: 'query',
       [mutationName]: 'mutation',
       [subscriptionName]: 'subscription',
+      query: 'query',
     };
 
     this.data = InMemoryData.make(queryName);
