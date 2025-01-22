@@ -1,7 +1,7 @@
 // @ts-nocheck
 import type { FormattedNode, CombinedError } from '@urql/core';
 import { formatDocument } from '@urql/core';
-
+import type { NormalizationSelection } from '@types/relay-runtime';
 import type {
   FieldNode,
   DocumentNode,
@@ -211,7 +211,7 @@ export const _writeFragment = (
 const writeSelection = (
   ctx: Context,
   entityKey: undefined | string,
-  select: FormattedNode<SelectionSet>,
+  select: FormattedNode<SelectionSet> | NormalizationSelection,
   data: Data
 ) => {
   // These fields determine how we write. The `Query` root type is written
@@ -221,7 +221,7 @@ const writeSelection = (
   const rootField = ctx.store.rootNames[entityKey!] || 'query';
   const isRoot = !!ctx.store.rootNames[entityKey!];
 
-  let typename = isRoot ? entityKey : data.__typename;
+  let typename = isRoot ? entityKey : data.__typename || select.concreteType;
   if (!typename && entityKey && ctx.optimistic) {
     typename = InMemoryData.readRecord(entityKey, '__typename') as
       | string
@@ -229,20 +229,15 @@ const writeSelection = (
   }
 
   if (!typename) {
-    // @ts-expect-error Lalitha
-    if (select[0].concreteType) {
-      // @ts-expect-error Lalitha
-      typename = select.concreteType;
-    } else {
-      warn(
-        "Couldn't find __typename when writing.\n" +
-          "If you're writing to the cache manually have to pass a `__typename` property on each entity in your data.",
-        14,
-        ctx.store.logger
-      );
-      return;
-    }
+    warn(
+      "Couldn't find __typename when writing.\n" +
+        "If you're writing to the cache manually have to pass a `__typename` property on each entity in your data.",
+      14,
+      ctx.store.logger
+    );
+    //  return;
   } else if (!isRoot && entityKey) {
+    // Lalitha - figure out if this logic is useful to us and cost of it
     InMemoryData.writeRecord(entityKey, '__typename', typename);
     InMemoryData.writeType(typename, entityKey);
   }
@@ -314,6 +309,7 @@ const writeSelection = (
       fieldValue = ensureData(resolver(fieldArgs || {}, ctx.store, ctx));
     }
 
+    // Lalitha fix this .. modify this so that we use relay ast to skip optional fields before logging
     if (fieldValue === undefined) {
       if (process.env.NODE_ENV !== 'production') {
         if (
@@ -322,26 +318,27 @@ const writeSelection = (
           (ctx.optimistic && !InMemoryData.readRecord(entityKey, '__typename'))
         ) {
           const expected =
-            node.selectionSet === undefined
+            node.selectionSet || node.selections === undefined
               ? 'scalar (number, boolean, etc)'
               : 'selection set';
 
-          warn(
-            'Invalid undefined: The field at `' +
-              fieldKey +
-              '` is `undefined`, but the GraphQL query expects a ' +
-              expected +
-              ' for this field.',
-            13,
-            ctx.store.logger
-          );
+          // warn(
+          //   'Invalid undefined: The field at `' +
+          //     fieldKey +
+          //     '` is `undefined`, but the GraphQL query expects a ' +
+          //     expected +
+          //     ' for this field.',
+          //   13,
+          //   ctx.store.logger
+          // );
         }
       }
 
       continue; // Skip this field
     }
 
-    if (node.selectionSet) {
+    // Relay node.selections
+    if (node.selectionSet || node.selections) {
       // Process the field and write links for the child entities that have been written
       if (entityKey && rootField === 'query') {
         const key = joinKeys(entityKey, fieldKey);
@@ -352,7 +349,8 @@ const writeSelection = (
           key,
           ctx.optimistic
             ? InMemoryData.readLink(entityKey || typename, fieldKey)
-            : undefined
+            : undefined,
+          node.concreteType
         );
 
         InMemoryData.writeLink(entityKey || typename, fieldKey, link);
@@ -433,7 +431,8 @@ const writeField = (
   select: FormattedNode<SelectionSet>,
   data: null | Data | NullArray<Data>,
   parentFieldKey?: string,
-  prevLink?: Link
+  prevLink?: Link,
+  concreteType?: string
 ): Link | undefined => {
   if (Array.isArray(data)) {
     const newData = new Array(data.length);
@@ -459,9 +458,9 @@ const writeField = (
   }
 
   const entityKey =
-    ctx.store.keyOfEntity(data) ||
+    ctx.store.keyOfEntity(data, concreteType) ||
     (typeof prevLink === 'string' ? prevLink : null);
-  const typename = data.__typename;
+  const typename = data.__typename || concreteType;
 
   if (
     parentFieldKey &&

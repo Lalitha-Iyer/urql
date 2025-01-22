@@ -45,6 +45,7 @@ export const getSelectionSet = (
         selectionSet?: FormattedNode<SelectionSetNode>;
       }
     | RelayNode
+    | NormalizationField
 ):
   | FormattedNode<SelectionSet>
   | readonly NormalizationSelection[]
@@ -55,6 +56,8 @@ export const getSelectionSet = (
     ) as FormattedNode<SelectionSet>;
   } else if ('default' in node) {
     return node.default.operation.selections;
+  } else if ('selections' in node) {
+    return node.selections;
   }
 };
 

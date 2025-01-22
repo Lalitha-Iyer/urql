@@ -119,30 +119,32 @@ export class Store<
     return keyOfField(fieldName, fieldArgs);
   }
 
-  keyOfEntity(data: Entity) {
+  keyOfEntity(data: Entity, concreteType: string = '') {
     // In resolvers and updaters we may have a specific parent
     // object available that can be used to skip to a specific parent
     // key directly without looking at its incomplete properties
+
     if (contextRef && data === contextRef.parent) {
       return contextRef.parentKey;
     } else if (data == null || typeof data === 'string') {
       return data || null;
-    } else if (!data.__typename) {
+    } // Relay artifacts global id
+    else if (!data.__typename && !data._id) {
       return null;
     } else if (this.rootNames[data.__typename]) {
       return data.__typename;
     }
 
     let key: string | null = null;
-    if (this.keys[data.__typename]) {
-      key = this.keys[data.__typename](data) || null;
+    if (this.keys[data.__typename || concreteType]) {
+      key = this.keys[data.__typename || concreteType](data) || null;
     } else if (data.id != null) {
       key = `${data.id}`;
     } else if (data._id != null) {
       key = `${data._id}`;
     }
+    const typename = data.__typename || concreteType;
 
-    const typename = data.__typename;
     const globalID =
       this.globalIDs === true ||
       (this.globalIDs && this.globalIDs.has(typename));

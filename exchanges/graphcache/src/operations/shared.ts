@@ -161,7 +161,12 @@ const isFragmentHeuristicallyMatching = (
 };
 
 function isField(select) {
-  return select.kind == Kind.FIELD || select.kind == 'LinkedField';
+  return (
+    select.kind == Kind.FIELD ||
+    select.kind == 'LinkedField' ||
+    select.kind == 'ScalarField' ||
+    select.kind == 'PluralLinkedField'
+  );
 }
 
 export class SelectionIterator {
