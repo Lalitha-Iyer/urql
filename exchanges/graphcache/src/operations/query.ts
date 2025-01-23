@@ -91,7 +91,7 @@ export const _query = (
     rootKey = store.rootFields[operation.operation];
   } else {
     // Relay
-    rootKey = operation.default.fragment.type;
+    rootKey = store.rootFields[operation.default.fragment.type];
   }
   const rootSelect = getSelectionSet(operation);
 
@@ -143,7 +143,7 @@ const readRoot = (
 ): Data => {
   const typename = ctx.store.rootNames[entityKey]
     ? entityKey
-    : input.__typename;
+    : input && input.__typename;
   if (typeof typename !== 'string') {
     return input;
   }
@@ -168,12 +168,9 @@ const readRoot = (
     // We temporarily store the data field in here, but undefined
     // means that the value is missing from the cache
     let dataFieldValue: void | DataField;
-    if (node.selectionSet && fieldValue !== null) {
-      dataFieldValue = readRootField(
-        ctx,
-        getSelectionSet(node),
-        ensureData(fieldValue)
-      );
+    const selections = getSelectionSet(node);
+    if (selections && fieldValue !== null) {
+      dataFieldValue = readRootField(ctx, selections, ensureData(fieldValue));
     } else {
       dataFieldValue = fieldValue;
     }
@@ -219,7 +216,12 @@ const readRootField = (
     // since the result data has already been written to the cache
     return readSelection(ctx, entityKey, select, originalData) || null;
   } else {
-    return readRoot(ctx, originalData.__typename, select, originalData);
+    return readRoot(
+      ctx,
+      originalData && originalData.__typename,
+      select,
+      originalData
+    );
   }
 };
 
@@ -435,10 +437,11 @@ const readSelection = (
     // means that the value is missing from the cache
     let dataFieldValue: void | DataField = undefined;
 
+    const selections = getSelectionSet(node);
     if (fieldName === '__typename') {
       // We directly assign the typename as it's already available
       dataFieldValue = typename;
-    } else if (resultValue !== undefined && node.selectionSet === undefined) {
+    } else if (resultValue !== undefined && selections === undefined) {
       // The field is a scalar and can be retrieved directly from the result
       dataFieldValue = resultValue;
     } else if (InMemoryData.currentOperation === 'read' && resolver) {
@@ -447,7 +450,7 @@ const readSelection = (
       // as to avoid the user having to do `cache.resolve(parent, info.fieldKey)`
       // only to get a scalar value.
       let parent = output;
-      if (node.selectionSet === undefined && fieldValue !== undefined) {
+      if (selections === undefined && fieldValue !== undefined) {
         parent = {
           ...output,
           [fieldAlias]: fieldValue,
@@ -466,7 +469,7 @@ const readSelection = (
         ctx
       );
 
-      if (node.selectionSet) {
+      if (selections) {
         // When it has a selection set we are resolving an entity with a
         // subselection. This can either be a list or an object.
         dataFieldValue = resolveResolverResult(
@@ -474,7 +477,7 @@ const readSelection = (
           typename,
           fieldName,
           key,
-          getSelectionSet(node),
+          selections,
           (output[fieldAlias] !== undefined
             ? output[fieldAlias]
             : input[fieldAlias]) as Data,
@@ -492,7 +495,7 @@ const readSelection = (
         // current field
         return undefined;
       }
-    } else if (!node.selectionSet) {
+    } else if (!selections) {
       // The field is a scalar but isn't on the result, so it's retrieved from the cache
       dataFieldValue = fieldValue;
     } else if (resultValue !== undefined) {
@@ -502,7 +505,7 @@ const readSelection = (
         typename,
         fieldName,
         key,
-        getSelectionSet(node),
+        selections,
         (output[fieldAlias] !== undefined
           ? output[fieldAlias]
           : input[fieldAlias]) as Data,
@@ -519,7 +522,7 @@ const readSelection = (
           link,
           typename,
           fieldName,
-          getSelectionSet(node),
+          selections,
           (output[fieldAlias] !== undefined
             ? output[fieldAlias]
             : input[fieldAlias]) as Data,
