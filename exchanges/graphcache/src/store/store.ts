@@ -58,7 +58,12 @@ export class Store<
   globalIDs: Set<string> | boolean;
   schema?: SchemaIntrospector;
 
-  rootFields: { query: string; mutation: string; subscription: string };
+  rootFields: {
+    query: string;
+    mutation: string;
+    subscription: string;
+    Query: string;
+  };
   rootNames: { [name: string]: RootField | void };
 
   constructor(opts?: C) {
@@ -90,6 +95,7 @@ export class Store<
 
     this.rootFields = {
       query: queryName,
+      Query: queryName,
       mutation: mutationName,
       subscription: subscriptionName,
     };

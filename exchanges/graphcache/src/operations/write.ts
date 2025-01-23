@@ -109,7 +109,7 @@ export const _write = (
   // @ts-expect-error
   const kind =
     store.rootFields[operation.operation] || operation.default
-      ? 'query'
+      ? 'Query'
       : operation.default.operation;
 
   const ctx = makeContext(
