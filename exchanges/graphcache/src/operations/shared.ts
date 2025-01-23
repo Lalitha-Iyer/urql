@@ -328,7 +328,7 @@ const isFragmentMatching = (typeCondition: string, typename: string | void) => {
 };
 
 export const ensureData = (x: DataField): Data | NullArray<Data> | null =>
-  x == null ? null : (x as Data | NullArray<Data>);
+  x === null ? null : (x as Data | NullArray<Data>);
 
 export const ensureLink = (store: Store, ref: Link<Entity>): Link => {
   if (!ref) {
