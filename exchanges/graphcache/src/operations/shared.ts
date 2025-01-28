@@ -13,6 +13,7 @@ import {
   getSelectionSet,
   getName,
   isOptional,
+  isInterfaceOfTypeRelay,
 } from '../ast';
 
 import { warn, pushDebugNode, popDebugNode } from '../helpers/help';
@@ -39,6 +40,8 @@ import type {
   Data,
   Logger,
 } from '../types';
+import { NormalizationSelection } from 'relay-runtime';
+import { NormalizationCondition } from 'relay-runtime/lib/util/NormalizationNode';
 
 export interface Context {
   store: Store;
@@ -174,7 +177,9 @@ export class SelectionIterator {
   entityKey: string;
   ctx: Context;
   stack: {
-    selectionSet: FormattedNode<SelectionSet>;
+    selectionSet:
+      | FormattedNode<SelectionSet>
+      | readonly NormalizationSelection[];
     index: number;
     defer: boolean;
     optional: boolean | undefined;
@@ -250,31 +255,36 @@ export class SelectionIterator {
               : select;
           if (fragment) {
             const isMatching =
-              !fragment.typeCondition ||
+              (!fragment.typeCondition && !fragment.type) ||
               (this.ctx.store.schema
                 ? isInterfaceOfType(
                     this.ctx.store.schema,
                     fragment,
                     this.typename
                   )
-                : (currentOperation === 'read' &&
-                    isFragmentMatching(
-                      fragment.typeCondition.name.value,
-                      this.typename
-                    )) ||
-                  isFragmentHeuristicallyMatching(
+                : isInterfaceOfTypeRelay(
                     fragment,
                     this.typename,
-                    this.entityKey,
-                    this.ctx.variables,
-                    this.ctx.store.logger
-                  ));
+                    currentOperation
+                  ) ||
+                  (currentOperation === 'read' &&
+                    isFragmentMatching(fragment, this.typename)) ||
+                  (!fragment.type &&
+                    isFragmentHeuristicallyMatching(
+                      fragment,
+                      this.typename,
+                      this.entityKey,
+                      this.ctx.variables,
+                      this.ctx.store.logger
+                    )));
             if (
               isMatching ||
               (currentOperation === 'write' && !this.ctx.store.schema)
             ) {
               if (process.env.NODE_ENV !== 'production')
                 pushDebugNode(this.typename, fragment);
+
+              // Relay concrete type and the node type don't match, then the field is optional
               const isFragmentOptional = isOptional(select);
               if (
                 isMatching &&
@@ -287,6 +297,9 @@ export class SelectionIterator {
                 );
               }
 
+              if (isMatching && fragment.abstractKey) {
+                writeConcreteType(fragment.abstractKey, this.typename!);
+              }
               this.stack.push(
                 (state = {
                   selectionSet: getSelectionSet(fragment),
@@ -316,14 +329,17 @@ export class SelectionIterator {
   }
 }
 
-const isFragmentMatching = (typeCondition: string, typename: string | void) => {
+const isFragmentMatching = (fragment, typename: string | void) => {
+  const fragmentType = getTypeCondition(fragment);
   if (!typename) return false;
-  if (typeCondition === typename) return true;
+  if (fragmentType === typename) return true;
+  // If its a Relay fragment skip checking for probable abstract types
+  if (fragment.type) return false;
 
-  const isProbableAbstractType = !isSeenConcreteType(typeCondition);
+  const isProbableAbstractType = !isSeenConcreteType(fragment.typeCondition);
   if (!isProbableAbstractType) return false;
 
-  const types = getConcreteTypes(typeCondition);
+  const types = getConcreteTypes(fragment.typeCondition);
   return types.size && types.has(typename);
 };
 
