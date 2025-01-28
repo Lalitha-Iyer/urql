@@ -212,7 +212,8 @@ const writeSelection = (
   ctx: Context,
   entityKey: undefined | string,
   select: FormattedNode<SelectionSet> | NormalizationSelection,
-  data: Data
+  data: Data,
+  concreteType?: string
 ) => {
   // These fields determine how we write. The `Query` root type is written
   // like a normal entity, hence, we use `rootField` with a default to determine
@@ -221,7 +222,7 @@ const writeSelection = (
   const rootField = ctx.store.rootNames[entityKey!] || 'query';
   const isRoot = !!ctx.store.rootNames[entityKey!];
 
-  let typename = isRoot ? entityKey : data.__typename || select.concreteType;
+  let typename = (isRoot ? entityKey : data.__typename) || concreteType;
   if (!typename && entityKey && ctx.optimistic) {
     typename = InMemoryData.readRecord(entityKey, '__typename') as
       | string
@@ -235,7 +236,7 @@ const writeSelection = (
       14,
       ctx.store.logger
     );
-    //  return;
+    return;
   } else if (!isRoot && entityKey) {
     // Lalitha - figure out if this logic is useful to us and cost of it
     InMemoryData.writeRecord(entityKey, '__typename', typename);
@@ -488,6 +489,6 @@ const writeField = (
   }
 
   const childKey = entityKey || parentFieldKey;
-  writeSelection(ctx, childKey, select, data);
+  writeSelection(ctx, childKey, select, data, concreteType);
   return childKey || null;
 };
