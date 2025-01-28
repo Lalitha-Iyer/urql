@@ -10,7 +10,11 @@ import type {
 
 import type { FormattedNode } from '@urql/core';
 import type { RelayNode } from './traversal';
-import type { NormalizationField, NormalizationSelection } from 'relay-runtime';
+import type {
+  ReaderFragment,
+  NormalizationField,
+  NormalizationSelection,
+} from 'relay-runtime';
 
 export type SelectionSet = readonly FormattedNode<SelectionNode>[];
 
@@ -23,7 +27,7 @@ export const getDirectives = (node: {
 
 /** Returns the name of a given node */
 export const getName = (node: { name: NameNode | string }): string =>
-  typeof node.name === 'string' ? node.name : node.name.value;
+  typeof node.name === 'string' ? node.name : node.name && node.name.value;
 
 export const getFragmentTypeName = (node: FragmentDefinitionNode): string =>
   node.typeCondition.name.value;
@@ -61,7 +65,15 @@ export const getSelectionSet = (
   }
 };
 
-export const getTypeCondition = (node: {
-  typeCondition?: NamedTypeNode;
-}): string | null =>
-  node.typeCondition ? node.typeCondition.name.value : null;
+export const getTypeCondition = (
+  node:
+    | {
+        typeCondition?: NamedTypeNode;
+      }
+    | ReaderFragment
+): string | null =>
+  'typeCondition' in node && node.typeCondition
+    ? node.typeCondition.name.value
+    : 'type' in node
+      ? node.type
+      : null;
