@@ -14,6 +14,7 @@ import type {
   OptimisticMutationConfig,
   Logger,
 } from '../types';
+import { getConcreteTypes } from '../store/data';
 
 const BUILTIN_NAME = '__';
 
@@ -40,15 +41,27 @@ export const isListNullable = (
   return ofType.kind === 'LIST' && ofType.ofType.kind !== 'NON_NULL';
 };
 
+// Relay generated AST nodes have a `type` property that is the concrete type of a for a InlineFragmentNode.
+// fieldConcreteType is the concrete type for the InlineFragmentNode.
 export const isFieldAvailableOnType = (
   schema: SchemaIntrospector,
   typename: string,
   fieldName: string,
-  logger: Logger | undefined
+  logger: Logger | undefined,
+  fieldConcreteType?: string
 ): boolean =>
   fieldName.indexOf(BUILTIN_NAME) === 0 ||
   typename.indexOf(BUILTIN_NAME) === 0 ||
+  (fieldConcreteType && fieldConcreteType === typename) ||
   !!getField(schema, typename, fieldName, logger);
+
+export const isInterfaceOfTypeRelay = (node, typename, currentOperation) => {
+  if (currentOperation === 'write') {
+    return node.hasOwnProperty('abstractKey');
+  } else {
+    return getConcreteTypes(node.abstractKey).has(typename);
+  }
+};
 
 export const isInterfaceOfType = (
   schema: SchemaIntrospector,
