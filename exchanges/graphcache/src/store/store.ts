@@ -134,8 +134,8 @@ export class Store<
       return contextRef.parentKey;
     } else if (data == null || typeof data === 'string') {
       return data || null;
-    } // Relay artifacts global id
-    else if (!data.__typename && !data._id) {
+    } // Relay artifact provides us with concrete types so we don't necessarily need to query for __typename.
+    else if (!data.__typename && !concreteType) {
       return null;
     } else if (this.rootNames[data.__typename]) {
       return data.__typename;
