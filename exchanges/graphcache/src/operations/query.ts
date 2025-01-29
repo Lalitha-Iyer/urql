@@ -353,7 +353,8 @@ const readSelection = (
   key: string,
   select: FormattedNode<SelectionSet>,
   input: Data,
-  result?: Data
+  result?: Data,
+  concreteType?: string
 ): Data | undefined => {
   const { store } = ctx;
   const isQuery = key === store.rootFields.query;
@@ -377,7 +378,8 @@ const readSelection = (
 
   const typename = !isQuery
     ? InMemoryData.readRecord(entityKey, '__typename') ||
-      (result && result.__typename)
+      (result && result.__typename) ||
+      concreteType
     : key;
 
   if (typeof typename !== 'string') {
@@ -415,6 +417,8 @@ const readSelection = (
     const fieldName = getName(node);
     const fieldArgs = getFieldArguments(node, ctx.variables);
     const fieldAlias = getFieldAlias(node);
+    const concreteType = node.concreteType;
+
     const directives = getDirectives(node);
     const resolver = getFieldResolver(directives, typename, fieldName, ctx);
     const fieldKey = keyOfField(fieldName, fieldArgs);
@@ -526,7 +530,8 @@ const readSelection = (
           (output[fieldAlias] !== undefined
             ? output[fieldAlias]
             : input[fieldAlias]) as Data,
-          InMemoryData.ownsData(input)
+          InMemoryData.ownsData(input),
+          concreteType
         );
       } else if (typeof fieldValue === 'object' && fieldValue !== null) {
         // The entity on the field was invalid but can still be recovered
