@@ -254,7 +254,7 @@ const writeSelection = (
   );
 
   let node: FormattedNode<FieldNode> | void;
-  while ((node = selection.next())) {
+  while ((node = selection.next(data))) {
     const fieldName = getName(node);
     const fieldArgs = getFieldArguments(node, ctx.variables);
     const fieldKey = keyOfField(fieldName, fieldArgs);

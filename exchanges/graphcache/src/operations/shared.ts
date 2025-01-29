@@ -225,7 +225,7 @@ export class SelectionIterator {
     ];
   }
 
-  next() {
+  next(data?: any) {
     while (this.stack.length > 0) {
       let state = this.stack[this.stack.length - 1];
       while (state.index < state.selectionSet.length) {
@@ -297,8 +297,12 @@ export class SelectionIterator {
                 );
               }
 
-              if (isMatching && fragment.abstractKey) {
-                writeConcreteType(fragment.abstractKey, this.typename!);
+              //Relay artifact
+              if (fragment.type || currentOperation === 'write') {
+                // We only write the concrete type if the type discriminator field is present in data.
+                if (data && data.hasOwnProperty(fragment.abstractKey)) {
+                  writeConcreteType(fragment.abstractKey, this.typename!);
+                }
               }
               this.stack.push(
                 (state = {
