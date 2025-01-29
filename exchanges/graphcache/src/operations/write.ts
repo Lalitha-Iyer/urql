@@ -446,7 +446,14 @@ const writeField = (
         : undefined;
       // Recursively write array data
       const prevIndex = prevLink != null ? prevLink[i] : undefined;
-      const links = writeField(ctx, select, data[i], indexKey, prevIndex);
+      const links = writeField(
+        ctx,
+        select,
+        data[i],
+        indexKey,
+        prevIndex,
+        concreteType
+      );
       // Link cannot be expressed as a recursive type
       newData[i] = links as string | null;
       // After processing the field, remove the current index from the path
@@ -465,7 +472,7 @@ const writeField = (
 
   if (
     parentFieldKey &&
-    !ctx.store.keys[data.__typename] &&
+    !ctx.store.keys[typename] &&
     entityKey === null &&
     typeof typename === 'string' &&
     !KEYLESS_TYPE_RE.test(typename)
