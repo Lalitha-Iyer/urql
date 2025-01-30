@@ -61,10 +61,25 @@ export function makeFetchBody<
     body.documentId = (
       request.query as unknown as PersistedDocument
     ).documentId;
-  } else if (
-    !request.extensions ||
-    !request.extensions.persistedQuery ||
-    !!request.extensions.persistedQuery.miss
+  }
+  if (
+    'default' in request.query &&
+    'id' in request.query.default.params &&
+    request.query.default.params.id
+  ) {
+    //Relay persisted query
+    body.extensions = {
+      persistedQuery: {
+        id: request.query.default.params.id,
+        version: 102,
+      },
+    };
+  } // For relay artifacts we already have query text, no need to stringify
+  else if (
+    (!request.extensions ||
+      !request.extensions.persistedQuery ||
+      !!request.extensions.persistedQuery.miss) &&
+    !body.query
   ) {
     body.query = stringifyDocument(request.query as unknown as DocumentNode);
   }
