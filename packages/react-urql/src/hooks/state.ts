@@ -1,5 +1,6 @@
 import * as React from 'react';
 
+import { recycleNodesInto } from 'relay-runtime';
 export const initialState = {
   fetching: false,
   stale: false,
@@ -57,7 +58,9 @@ export const computeNextState = <T extends Stateish>(
     stale: !!result.stale,
   };
 
-  return isShallowDifferent(prevState, newState) ? newState : prevState;
+  return isShallowDifferent(prevState, newState)
+    ? recyleNodesInto(prevState, newState)
+    : prevState;
 };
 
 export const hasDepsChanged = <T extends { length: number }>(a: T, b: T) => {
