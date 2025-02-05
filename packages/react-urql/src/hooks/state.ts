@@ -59,7 +59,7 @@ export const computeNextState = <T extends Stateish>(
   };
 
   return isShallowDifferent(prevState, newState)
-    ? recyleNodesInto(prevState, newState)
+    ? recycleNodesInto(prevState, newState)
     : prevState;
 };
 
