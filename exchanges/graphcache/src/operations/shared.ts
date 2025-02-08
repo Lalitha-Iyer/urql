@@ -24,6 +24,7 @@ import {
   writeConcreteType,
   getConcreteTypes,
   isSeenConcreteType,
+  writeAbstractType,
 } from '../store/data';
 import { keyOfField } from '../store/keys';
 import type { Store } from '../store/store';
@@ -262,11 +263,7 @@ export class SelectionIterator {
                     fragment,
                     this.typename
                   )
-                : isInterfaceOfTypeRelay(
-                    fragment,
-                    this.typename,
-                    currentOperation
-                  ) ||
+                : isInterfaceOfTypeRelay(fragment, this.typename) ||
                   (currentOperation === 'read' &&
                     isFragmentMatching(fragment, this.typename)) ||
                   (!fragment.type &&
@@ -277,6 +274,17 @@ export class SelectionIterator {
                       this.ctx.variables,
                       this.ctx.store.logger
                     )));
+            //Relay artifact
+            if (fragment.abstractKey || currentOperation === 'write') {
+              // We only write the concrete type if the type discriminator field is present in data.
+              if (data) {
+                writeAbstractType(
+                  fragment.abstractKey,
+                  this.typename!,
+                  data.hasOwnProperty(fragment.abstractKey)
+                );
+              }
+            }
             if (
               isMatching ||
               (currentOperation === 'write' && !this.ctx.store.schema)
@@ -297,13 +305,6 @@ export class SelectionIterator {
                 );
               }
 
-              //Relay artifact
-              if (fragment.type || currentOperation === 'write') {
-                // We only write the concrete type if the type discriminator field is present in data.
-                if (data && data.hasOwnProperty(fragment.abstractKey)) {
-                  writeConcreteType(fragment.abstractKey, this.typename!);
-                }
-              }
               this.stack.push(
                 (state = {
                   selectionSet: getSelectionSet(fragment),
@@ -334,11 +335,11 @@ export class SelectionIterator {
 }
 
 const isFragmentMatching = (fragment, typename: string | void) => {
+  // If its a Relay fragment skip checking for probable abstract types
+  if (fragment.type) return false;
   const fragmentType = getTypeCondition(fragment);
   if (!typename) return false;
   if (fragmentType === typename) return true;
-  // If its a Relay fragment skip checking for probable abstract types
-  if (fragment.type) return false;
 
   const isProbableAbstractType = !isSeenConcreteType(fragment.typeCondition);
   if (!isProbableAbstractType) return false;

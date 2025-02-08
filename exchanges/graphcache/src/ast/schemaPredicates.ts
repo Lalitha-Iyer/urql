@@ -14,7 +14,7 @@ import type {
   OptimisticMutationConfig,
   Logger,
 } from '../types';
-import { getConcreteTypes } from '../store/data';
+import { getAbstractTypes } from '../store/data';
 
 const BUILTIN_NAME = '__';
 
@@ -55,12 +55,17 @@ export const isFieldAvailableOnType = (
   (fieldConcreteType && fieldConcreteType === typename) ||
   !!getField(schema, typename, fieldName, logger);
 
-export const isInterfaceOfTypeRelay = (node, typename, currentOperation) => {
-  if (currentOperation === 'write') {
-    return node.hasOwnProperty('abstractKey');
-  } else {
-    return getConcreteTypes(node.abstractKey).has(typename);
-  }
+// Abstract refinement: check data depending on whether the type
+// conforms to the interface/union or not:
+// - Type known to _not_ implement the interface: don't check the selections.
+// - Type is known _to_ implement the interface: check selections.
+// - Unknown whether the type implements the interface: don't check the selections
+//   and treat the data as missing; we do this because the Relay Compiler
+//   guarantees that the type discriminator will always be fetched.
+export const isInterfaceOfTypeRelay = (node, typename) => {
+  return (
+    getAbstractTypes(typename) && getAbstractTypes(typename)![node.abstractKey]
+  );
 };
 
 export const isInterfaceOfType = (
