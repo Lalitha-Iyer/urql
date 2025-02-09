@@ -275,7 +275,7 @@ export class SelectionIterator {
                       this.ctx.store.logger
                     )));
             //Relay artifact
-            if (fragment.abstractKey || currentOperation === 'write') {
+            if (currentOperation === 'write') {
               // We only write the concrete type if the type discriminator field is present in data.
               if (data) {
                 writeAbstractType(
@@ -335,12 +335,12 @@ export class SelectionIterator {
 }
 
 const isFragmentMatching = (fragment, typename: string | void) => {
-  // If its a Relay fragment skip checking for probable abstract types
-  if (fragment.type) return false;
   const fragmentType = getTypeCondition(fragment);
   if (!typename) return false;
   if (fragmentType === typename) return true;
 
+  // If its a Relay fragment skip checking for probable abstract types
+  if (fragment.type) return false;
   const isProbableAbstractType = !isSeenConcreteType(fragment.typeCondition);
   if (!isProbableAbstractType) return false;
 

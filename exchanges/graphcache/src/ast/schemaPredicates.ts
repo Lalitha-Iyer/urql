@@ -63,9 +63,12 @@ export const isFieldAvailableOnType = (
 //   and treat the data as missing; we do this because the Relay Compiler
 //   guarantees that the type discriminator will always be fetched.
 export const isInterfaceOfTypeRelay = (node, typename) => {
-  return (
-    getAbstractTypes(typename) && getAbstractTypes(typename)![node.abstractKey]
-  );
+  const abstractTypes = getAbstractTypes(typename);
+  // Unknown
+  if (!abstractTypes || abstractTypes[node.abstractKey] === undefined) {
+    return true;
+  }
+  return abstractTypes[node.abstractKey];
 };
 
 export const isInterfaceOfType = (
