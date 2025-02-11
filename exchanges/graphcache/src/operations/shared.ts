@@ -275,15 +275,13 @@ export class SelectionIterator {
                       this.ctx.store.logger
                     )));
             //Relay artifact
-            if (currentOperation === 'write') {
+            if (currentOperation === 'write' && fragment.abstractKey && data) {
               // We only write the concrete type if the type discriminator field is present in data.
-              if (data) {
-                writeAbstractType(
-                  fragment.abstractKey,
-                  this.typename!,
-                  data.hasOwnProperty(fragment.abstractKey)
-                );
-              }
+              writeAbstractType(
+                fragment.abstractKey,
+                this.typename!,
+                data.hasOwnProperty(fragment.abstractKey)
+              );
             }
             if (
               isMatching ||

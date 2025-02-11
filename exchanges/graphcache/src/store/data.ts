@@ -61,8 +61,6 @@ export interface InMemoryData {
   storage: StorageAdapter | null;
   /** A map of all the types we have encountered that did not map directly to a concrete type */
   abstractToConcreteMap: Map<string, Set<string>>;
-
-  concreteToAbstractMap: Map<string, Object>;
 }
 
 let currentOwnership: null | WeakSet<any> = null;
@@ -254,7 +252,6 @@ export const make = (queryRootKey: string): InMemoryData => ({
     base: new Map(),
   },
   abstractToConcreteMap: new Map(),
-  concreteToAbstractMap: new Map(),
   records: {
     optimistic: new Map(),
     base: new Map(),
@@ -495,9 +492,6 @@ export const writeType = (typename: string, entityKey: string) => {
 export const getConcreteTypes = (typename: string): Set<string> =>
   currentData!.abstractToConcreteMap.get(typename) || DEFAULT_EMPTY_SET;
 
-export const getAbstractTypes = (typename: string) =>
-  currentData!.concreteToAbstractMap.get(typename) || null;
-
 export const isSeenConcreteType = (typename: string): boolean =>
   currentData!.types.has(typename);
 
@@ -521,15 +515,11 @@ export const writeAbstractType = (
   concreteType: string,
   implementsInterface: boolean
 ) => {
-  const existingConcreteTypes =
-    currentData!.concreteToAbstractMap.get(concreteType);
-  if (!existingConcreteTypes) {
-    const typeSet = {};
-    typeSet[abstractType] = implementsInterface;
-    currentData!.concreteToAbstractMap.set(concreteType, typeSet);
-  } else {
-    existingConcreteTypes[abstractType] = implementsInterface;
-  }
+  writeRecord(
+    `client:__type:${concreteType}`,
+    abstractType,
+    implementsInterface
+  );
 };
 
 /** Writes an entity's field (a "record") to data */

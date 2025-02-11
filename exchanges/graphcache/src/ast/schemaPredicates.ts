@@ -14,7 +14,7 @@ import type {
   OptimisticMutationConfig,
   Logger,
 } from '../types';
-import { getAbstractTypes } from '../store/data';
+import { readRecord } from '../store/data';
 
 const BUILTIN_NAME = '__';
 
@@ -63,12 +63,16 @@ export const isFieldAvailableOnType = (
 //   and treat the data as missing; we do this because the Relay Compiler
 //   guarantees that the type discriminator will always be fetched.
 export const isInterfaceOfTypeRelay = (node, typename) => {
-  const abstractTypes = getAbstractTypes(typename);
-  // Unknown
-  if (!abstractTypes || abstractTypes[node.abstractKey] === undefined) {
+  if (!node.abstractKey) return false;
+  const implementsInterface = readRecord(
+    `client:__type:${typename}`,
+    node.abstractKey
+  );
+  // unknown if the type implements the interface
+  if (implementsInterface === null || implementsInterface === undefined) {
     return true;
   }
-  return abstractTypes[node.abstractKey];
+  return implementsInterface;
 };
 
 export const isInterfaceOfType = (
