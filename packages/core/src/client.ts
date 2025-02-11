@@ -733,10 +733,12 @@ export const Client: new (opts: ClientOptions) => Client = function Client(
       if (!opts) opts = {};
 
       let requestOperationType: string | undefined;
+      // Relay artifact's don't have query.
       if (
         process.env.NODE_ENV !== 'production' &&
         kind !== 'teardown' &&
-        (requestOperationType = getOperationType(request.query)) !== kind
+        (requestOperationType = getOperationType(request.query || request)) !==
+          kind
       ) {
         throw new Error(
           `Expected operation of type "${kind}" but found "${requestOperationType}"`
