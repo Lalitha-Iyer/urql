@@ -417,7 +417,6 @@ const readSelection = (
     const fieldName = getName(node);
     const fieldArgs = getFieldArguments(node, ctx.variables);
     const fieldAlias = getFieldAlias(node);
-    const concreteType = node.concreteType;
 
     const directives = getDirectives(node);
     const resolver = getFieldResolver(directives, typename, fieldName, ctx);
@@ -530,8 +529,7 @@ const readSelection = (
           (output[fieldAlias] !== undefined
             ? output[fieldAlias]
             : input[fieldAlias]) as Data,
-          InMemoryData.ownsData(input),
-          concreteType
+          InMemoryData.ownsData(input)
         );
       } else if (typeof fieldValue === 'object' && fieldValue !== null) {
         // The entity on the field was invalid but can still be recovered
@@ -582,6 +580,9 @@ const readSelection = (
     hasChanged = hasChanged || dataFieldValue !== input[fieldAlias];
     if (dataFieldValue !== undefined) {
       output[fieldAlias] = dataFieldValue;
+      if (dataFieldValue) {
+        dataFieldValue.ownerVars = ctx.variables;
+      }
     } else if (deferRef) {
       hasNext = true;
     } else {
