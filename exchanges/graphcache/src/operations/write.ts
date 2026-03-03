@@ -13,6 +13,7 @@ import {
   getMainOperation,
   normalizeVariables,
   getFieldArguments,
+  getDirectives,
   isFieldAvailableOnType,
   getSelectionSet,
   getName,
@@ -46,7 +47,7 @@ import {
   getFieldError,
   deferRef,
 } from './shared';
-import { invalidateType } from './invalidate';
+
 
 export interface WriteResult {
   data: null | Data;
@@ -95,7 +96,7 @@ export const _write = (
   data?: Data,
   error?: CombinedError | undefined
 ) => {
-  if (process.env.NODE_ENV !== 'production') {
+  if (process.env.NODE_ENV !== 'production' && InMemoryData.currentDependencies !== null) {
     InMemoryData.getCurrentDependencies();
   }
 
@@ -207,7 +208,8 @@ const writeSelection = (
   ctx: Context,
   entityKey: undefined | string,
   select: FormattedNode<SelectionSet>,
-  data: Data
+  data: Data,
+  concreteType?: string
 ) => {
   // These fields determine how we write. The `Query` root type is written
   // like a normal entity, hence, we use `rootField` with a default to determine
@@ -216,7 +218,7 @@ const writeSelection = (
   const rootField = ctx.store.rootNames[entityKey!] || 'query';
   const isRoot = !!ctx.store.rootNames[entityKey!];
 
-  let typename = isRoot ? entityKey : data.__typename;
+  let typename = isRoot ? entityKey : data.__typename || concreteType;
   if (!typename && entityKey && ctx.optimistic) {
     typename = InMemoryData.readRecord(entityKey, '__typename') as
       | string
@@ -233,7 +235,6 @@ const writeSelection = (
     return;
   } else if (!isRoot && entityKey) {
     InMemoryData.writeRecord(entityKey, '__typename', typename);
-    InMemoryData.writeType(typename, entityKey);
   }
 
   const updates = ctx.store.updates[typename];
@@ -247,7 +248,7 @@ const writeSelection = (
   );
 
   let node: FormattedNode<FieldNode> | void;
-  while ((node = selection.next())) {
+  while ((node = selection.next(data))) {
     const fieldName = getName(node);
     const fieldArgs = getFieldArguments(node, ctx.variables);
     const fieldKey = keyOfField(fieldName, fieldArgs);
@@ -341,12 +342,20 @@ const writeSelection = (
           key,
           ctx.optimistic
             ? InMemoryData.readLink(entityKey || typename, fieldKey)
-            : undefined
+            : undefined,
+          node
         );
 
         InMemoryData.writeLink(entityKey || typename, fieldKey, link);
       } else {
-        writeField(ctx, getSelectionSet(node), ensureData(fieldValue));
+        writeField(
+          ctx,
+          getSelectionSet(node),
+          ensureData(fieldValue),
+          undefined,
+          undefined,
+          node
+        );
       }
     } else if (entityKey && rootField === 'query') {
       // This is a leaf node, so we're setting the field's value directly
@@ -375,38 +384,6 @@ const writeSelection = (
 
       data[fieldName] = fieldValue;
       updater(data, fieldArgs || {}, ctx.store, ctx);
-    } else if (
-      typename === ctx.store.rootFields['mutation'] &&
-      !ctx.optimistic
-    ) {
-      // If we're on a mutation that doesn't have an updater, we'll see
-      // whether we can find the entity returned by the mutation in the cache.
-      // if we don't we'll assume this is a create mutation and invalidate
-      // the found __typename.
-      if (fieldValue && Array.isArray(fieldValue)) {
-        const excludedEntities: string[] = fieldValue.map(
-          entity => ctx.store.keyOfEntity(entity) || ''
-        );
-        for (let i = 0, l = fieldValue.length; i < l; i++) {
-          const key = excludedEntities[i];
-          if (key && fieldValue[i].__typename) {
-            const resolved = InMemoryData.readRecord(key, '__typename');
-            const count = InMemoryData!.getRefCount(key);
-            if (resolved && !count) {
-              invalidateType(fieldValue[i].__typename, excludedEntities);
-            }
-          }
-        }
-      } else if (fieldValue && typeof fieldValue === 'object') {
-        const key = ctx.store.keyOfEntity(fieldValue as any);
-        if (key) {
-          const resolved = InMemoryData.readRecord(key, '__typename');
-          const count = InMemoryData.getRefCount(key);
-          if ((!resolved || !count) && fieldValue.__typename) {
-            invalidateType(fieldValue.__typename, [key]);
-          }
-        }
-      }
     }
 
     // After processing the field, remove the current alias from the path again
@@ -422,7 +399,8 @@ const writeField = (
   select: FormattedNode<SelectionSet>,
   data: null | Data | NullArray<Data>,
   parentFieldKey?: string,
-  prevLink?: Link
+  prevLink?: Link,
+  node?: FormattedNode<FieldNode>
 ): Link | undefined => {
   if (Array.isArray(data)) {
     const newData = new Array(data.length);
@@ -435,7 +413,7 @@ const writeField = (
         : undefined;
       // Recursively write array data
       const prevIndex = prevLink != null ? prevLink[i] : undefined;
-      const links = writeField(ctx, select, data[i], indexKey, prevIndex);
+      const links = writeField(ctx, select, data[i], indexKey, prevIndex, node);
       // Link cannot be expressed as a recursive type
       newData[i] = links as string | null;
       // After processing the field, remove the current index from the path
@@ -447,10 +425,42 @@ const writeField = (
     return getFieldError(ctx) ? undefined : null;
   }
 
+  const nodeTypeCondition =
+    node &&
+    (node as any).typeCondition &&
+    (node as any).typeCondition.name &&
+    (node as any).typeCondition.name.value
+      ? ((node as any).typeCondition.name.value as string)
+      : undefined;
   const entityKey =
-    ctx.store.keyOfEntity(data) ||
+    ctx.store.keyOfEntity(data, nodeTypeCondition) ||
     (typeof prevLink === 'string' ? prevLink : null);
   const typename = data.__typename;
+  const directives = node ? getDirectives(node as any) : {};
+  const connectionDirective = (directives as any).connection;
+  const connectionKeys: string[] = [];
+  if (connectionDirective) {
+    const allConnectionDirectives = connectionDirective._all || [
+      connectionDirective,
+    ];
+    for (
+      let directiveIndex = 0;
+      directiveIndex < allConnectionDirectives.length;
+      directiveIndex++
+    ) {
+      const directive = allConnectionDirectives[directiveIndex];
+      const directiveArgs = directive
+        ? getFieldArguments(directive, ctx.variables)
+        : null;
+      const connectionKey = directiveArgs && (directiveArgs as any).key;
+      if (
+        typeof connectionKey === 'string' &&
+        connectionKeys.indexOf(connectionKey) === -1
+      ) {
+        connectionKeys.push(connectionKey);
+      }
+    }
+  }
 
   if (
     parentFieldKey &&
@@ -478,6 +488,207 @@ const writeField = (
   }
 
   const childKey = entityKey || parentFieldKey;
-  writeSelection(ctx, childKey, select, data);
+  writeSelection(ctx, childKey, select, data, nodeTypeCondition);
+
+  // Relay-style write-time connection merging.
+  // For each @connection key on the field, store merged results under a stable key.
+  const ownerEntityKey = parentFieldKey ? parentFieldKey.split('.')[0] : null;
+  if (connectionKeys.length > 0 && ownerEntityKey && childKey) {
+    const fieldArgs = node ? getFieldArguments(node, ctx.variables) : null;
+    const filterArgs = extractFilterArgs(fieldArgs);
+    const isPagination =
+      !!fieldArgs && (fieldArgs.after != null || fieldArgs.before != null);
+
+    const newTypename = InMemoryData.readRecord(childKey, '__typename');
+    const newEdges = InMemoryData.readLink(childKey, 'edges') as
+      | NullArray<string>
+      | undefined;
+    const newNodes = InMemoryData.readLink(childKey, 'nodes') as
+      | NullArray<string>
+      | undefined;
+    const newPageInfoKey = InMemoryData.readLink(childKey, 'pageInfo');
+    const newTotalCount = InMemoryData.readRecord(childKey, 'totalCount');
+
+    for (
+      let connectionKeyIndex = 0;
+      connectionKeyIndex < connectionKeys.length;
+      connectionKeyIndex++
+    ) {
+      const connectionKey = connectionKeys[connectionKeyIndex];
+      const stableKey = getConnectionStorageKey(
+        ownerEntityKey,
+        connectionKey,
+        filterArgs as Variables | undefined
+      );
+
+      const existingEdges = InMemoryData.readLink(stableKey, 'edges') as
+        | NullArray<string>
+        | undefined;
+      const existingNodes = InMemoryData.readLink(stableKey, 'nodes') as
+        | NullArray<string>
+        | undefined;
+      const existingTypename = InMemoryData.readRecord(stableKey, '__typename');
+
+      const mergedEdges =
+        existingTypename && isPagination
+          ? mergeConnectionEdges(existingEdges, newEdges, fieldArgs)
+          : newEdges;
+      const mergedNodes =
+        existingTypename && isPagination
+          ? mergeConnectionNodes(existingNodes, newNodes, fieldArgs)
+          : newNodes;
+
+      if (newTypename) {
+        InMemoryData.writeRecord(
+          stableKey,
+          '__typename',
+          newTypename as EntityField
+        );
+      }
+      if (mergedEdges) {
+        InMemoryData.writeLink(stableKey, 'edges', mergedEdges as Link);
+      }
+      if (mergedNodes) {
+        InMemoryData.writeLink(stableKey, 'nodes', mergedNodes as Link);
+      }
+
+      if (typeof newPageInfoKey === 'string') {
+        const existingPageInfoKey = InMemoryData.readLink(
+          stableKey,
+          'pageInfo'
+        );
+        if (typeof existingPageInfoKey === 'string' && isPagination) {
+          if (fieldArgs && fieldArgs.after != null) {
+            const newEndCursor = InMemoryData.readRecord(
+              newPageInfoKey,
+              'endCursor'
+            );
+            const newHasNextPage = InMemoryData.readRecord(
+              newPageInfoKey,
+              'hasNextPage'
+            );
+            if (newEndCursor !== undefined) {
+              InMemoryData.writeRecord(
+                existingPageInfoKey,
+                'endCursor',
+                newEndCursor
+              );
+            }
+            if (newHasNextPage !== undefined) {
+              InMemoryData.writeRecord(
+                existingPageInfoKey,
+                'hasNextPage',
+                newHasNextPage
+              );
+            }
+          } else if (fieldArgs && fieldArgs.before != null) {
+            const newStartCursor = InMemoryData.readRecord(
+              newPageInfoKey,
+              'startCursor'
+            );
+            const newHasPreviousPage = InMemoryData.readRecord(
+              newPageInfoKey,
+              'hasPreviousPage'
+            );
+            if (newStartCursor !== undefined) {
+              InMemoryData.writeRecord(
+                existingPageInfoKey,
+                'startCursor',
+                newStartCursor
+              );
+            }
+            if (newHasPreviousPage !== undefined) {
+              InMemoryData.writeRecord(
+                existingPageInfoKey,
+                'hasPreviousPage',
+                newHasPreviousPage
+              );
+            }
+          }
+        } else {
+          InMemoryData.writeLink(stableKey, 'pageInfo', newPageInfoKey);
+        }
+      }
+
+      if (newTotalCount !== undefined) {
+        InMemoryData.writeRecord(
+          stableKey,
+          'totalCount',
+          newTotalCount as EntityField
+        );
+      }
+
+      InMemoryData.writeRecord(stableKey, '__connectionKey', connectionKey);
+    }
+  }
+
   return childKey || null;
 };
+
+const PAGINATION_ARGS: Record<string, true> = {
+  after: true,
+  afterCursor: true,
+  before: true,
+  first: true,
+  last: true,
+};
+
+function extractFilterArgs(
+  fieldArgs: Record<string, unknown> | null | undefined
+) {
+  if (!fieldArgs) return undefined;
+  let filterArgs: Record<string, unknown> | undefined;
+  for (const key in fieldArgs) {
+    if (!PAGINATION_ARGS[key]) {
+      if (!filterArgs) filterArgs = {};
+      filterArgs[key] = fieldArgs[key];
+    }
+  }
+  return filterArgs;
+}
+
+export function getConnectionStorageKey(
+  parentEntityKey: string,
+  connectionKey: string,
+  filterArgs?: Variables
+) {
+  const baseKey = `${parentEntityKey}.__connection:${connectionKey}`;
+  if (filterArgs) {
+    const keys = Object.keys(filterArgs).sort();
+    if (keys.length > 0) {
+      const filterKey = keys
+        .map(k => `${k}:${JSON.stringify((filterArgs as any)[k])}`)
+        .join(',');
+      return `${baseKey}:${filterKey}`;
+    }
+  }
+  return baseKey;
+}
+
+function mergeConnectionEdges(
+  existingEdges: NullArray<string> | undefined,
+  newEdges: NullArray<string> | undefined,
+  args: Record<string, unknown> | null | undefined
+): NullArray<string> | undefined {
+  if (!existingEdges || existingEdges.length === 0) return newEdges;
+  if (!newEdges || newEdges.length === 0) return existingEdges;
+
+  if (args && args.before != null) return [...newEdges, ...existingEdges];
+  if (args && (args.after != null || args.afterCursor != null))
+    return [...existingEdges, ...newEdges];
+  return newEdges;
+}
+
+function mergeConnectionNodes(
+  existingNodes: NullArray<string> | undefined,
+  newNodes: NullArray<string> | undefined,
+  args: Record<string, unknown> | null | undefined
+): NullArray<string> | undefined {
+  if (!existingNodes || existingNodes.length === 0) return newNodes;
+  if (!newNodes || newNodes.length === 0) return existingNodes;
+
+  if (args && args.before != null) return [...newNodes, ...existingNodes];
+  if (args && (args.after != null || args.afterCursor != null))
+    return [...existingNodes, ...newNodes];
+  return newNodes;
+}

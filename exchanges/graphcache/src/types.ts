@@ -284,7 +284,7 @@ export interface Cache {
    * If it’s passed a `string` or `null`, it will simply return what it’s been passed.
    * Objects that lack a `__typename` field will return `null`.
    */
-  keyOfEntity(entity: Entity | undefined): string | null;
+  keyOfEntity(entity: Entity | undefined, concreteType?: string): string | null;
 
   /** Returns the cache key for a field.
    *
@@ -536,6 +536,10 @@ export type Logger = (
   message: string
 ) => void;
 
+export type EvictFn = (evict: (storeData: any) => void) => void;
+
+export type GcScheduler = (evict: EvictFn) => void;
+
 /** Input parameters for the {@link cacheExchange}. */
 export type CacheExchangeOpts = {
   /** Configure a custom-logger for graphcache, this function wll be called with a severity and a message.
@@ -603,7 +607,7 @@ export type CacheExchangeOpts = {
    * @see {@link https://urql.dev/goto/docs/graphcache/normalized-caching/#custom-keys-and-non-keyable-entities} for
    * the full keys docs.
    */
-  keys?: KeyingConfig;
+  keys?: KeyingConfig | ((data: Data, typeName: string) => string | undefined);
   /** Enables global IDs for keying GraphQL types.
    *
    * @remarks
@@ -657,6 +661,41 @@ export type CacheExchangeOpts = {
    * @see {@link https://urql.dev/goto/docs/graphcache/offline} for the full Offline Support docs.
    */
   storage?: StorageAdapter;
+  /** Custom scheduler for garbage collection execution.
+   *
+   * @remarks
+   * When provided, Graphcache defers internal GC work to this scheduler.
+   * The scheduler receives an `EvictFn`, which it may run immediately or later.
+   */
+  gcScheduler?: GcScheduler;
+  /** Disables ref-count based GC link tracking.
+   *
+   * @remarks
+   * When enabled, Graphcache won't adjust reference counters while links are
+   * written, effectively making entity eviction fully external.
+   */
+  disableRefCounting?: boolean;
+  /** Enables JSC-optimized data structures and field-key interning.
+   *
+   * @remarks
+   * When enabled, Graphcache swaps selected internal Map/Set allocations for
+   * object-backed structures and interns long field keys to reduce memory use
+   * in JavaScriptCore-heavy runtimes.
+   */
+  optimizeForJSC?: boolean;
+  /** Disables optimistic layers for performance on resource-constrained devices. */
+  disableLayers?: boolean;
+  /** Delays operation processing until initial storage hydration completes.
+   *
+   * @remarks
+   * When enabled together with `storage`, Graphcache waits for `storage.readData()`
+   * to resolve before processing operations. This avoids startup races where queries
+   * may miss the cache before persisted data has been hydrated.
+   *
+   * This is particularly useful in environments that disable network requests while
+   * relying on hydrated mock data.
+   */
+  syncHydrate?: boolean;
 };
 
 /** Cache Resolver, which may resolve or replace data during cache reads.

@@ -133,6 +133,9 @@ export const keyDocument = (node: string | DocumentNode): KeyedDocumentNode => {
     key = hashDocument(node);
     query = docs.get(key) || parse(node, { noLocation: true });
   } else {
+    if ((node as KeyedDocumentNode).__key) {
+      return node as KeyedDocumentNode;
+    }
     key = (node as KeyedDocumentNode).__key || hashDocument(node);
     query = docs.get(key) || node;
   }
@@ -170,9 +173,12 @@ export const createRequest = <
   const variables = _variables || ({} as Variables);
   const query = keyDocument(_query);
   const printedVars = stringifyVariables(variables, true);
-  let key = query.__key;
-  if (printedVars !== '{}') key = phash(printedVars, key);
-  return { key, query, variables, extensions };
+  let key: any = query.__key;
+  if (printedVars !== '{}') key = `${phash(printedVars)}-${key}`;
+  return { key, query, variables, extensions } as GraphQLRequest<
+    Data,
+    Variables
+  >;
 };
 
 /** Returns the name of the `DocumentNode`'s operation, if any.

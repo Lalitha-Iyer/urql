@@ -26,6 +26,7 @@ import { _query, _queryFragment } from '../operations/query';
 import { _write, _writeFragment } from '../operations/write';
 import { invalidateEntity, invalidateType } from '../operations/invalidate';
 import { keyOfField } from './keys';
+import { createKeySet, createKeyMap } from './dataStructures';
 import * as InMemoryData from './data';
 
 import type { SchemaIntrospector } from '../ast';
@@ -54,10 +55,11 @@ export class Store<
   resolvers: ResolverConfig;
   updates: UpdatesConfig;
   optimisticMutations: OptimisticMutationConfig;
-  keys: KeyingConfig;
+  keys: KeyingConfig | ((data: Data, typeName: string) => string | undefined);
   globalIDs: Set<string> | boolean;
   schema?: SchemaIntrospector;
   possibleTypeMap?: Map<string, Set<string>>;
+  disableRefCounting?: boolean;
 
   rootFields: { query: string; mutation: string; subscription: string };
   rootNames: { [name: string]: RootField | void };
@@ -72,8 +74,9 @@ export class Store<
     this.keys = opts.keys || {};
 
     this.globalIDs = Array.isArray(opts.globalIDs)
-      ? new Set(opts.globalIDs)
+      ? createKeySet(opts.globalIDs)
       : !!opts.globalIDs;
+    this.disableRefCounting = opts.disableRefCounting;
 
     let queryName = 'Query';
     let mutationName = 'Mutation';
@@ -88,10 +91,10 @@ export class Store<
     }
 
     if (!this.schema && opts.possibleTypes) {
-      this.possibleTypeMap = new Map();
+      this.possibleTypeMap = createKeyMap();
       for (const entry of Object.entries(opts.possibleTypes)) {
         const [abstractType, concreteTypes] = entry;
-        this.possibleTypeMap.set(abstractType, new Set(concreteTypes));
+        this.possibleTypeMap.set(abstractType, createKeySet(concreteTypes));
       }
     }
 
@@ -109,10 +112,14 @@ export class Store<
       [subscriptionName]: 'subscription',
     };
 
-    this.data = InMemoryData.make(queryName);
+    this.data = InMemoryData.make(queryName, opts.disableLayers);
+    this.data.gcScheduler = opts.gcScheduler;
+    this.data.disableRefCounting = this.disableRefCounting;
 
     if (this.schema && process.env.NODE_ENV !== 'production') {
-      expectValidKeyingConfig(this.schema, this.keys, this.logger);
+      if (typeof this.keys !== 'function') {
+        expectValidKeyingConfig(this.schema, this.keys, this.logger);
+      }
       expectValidUpdatesConfig(this.schema, this.updates, this.logger);
       expectValidResolversConfig(this.schema, this.resolvers, this.logger);
       expectValidOptimisticMutationsConfig(
@@ -127,7 +134,7 @@ export class Store<
     return keyOfField(fieldName, fieldArgs);
   }
 
-  keyOfEntity(data: Entity) {
+  keyOfEntity(data: Entity, concreteType?: string) {
     // In resolvers and updaters we may have a specific parent
     // object available that can be used to skip to a specific parent
     // key directly without looking at its incomplete properties
@@ -135,22 +142,26 @@ export class Store<
       return contextRef.parentKey;
     } else if (data == null || typeof data === 'string') {
       return data || null;
-    } else if (!data.__typename) {
+    } else if (!(data.__typename || concreteType)) {
       return null;
-    } else if (this.rootNames[data.__typename]) {
-      return data.__typename;
+    }
+
+    const typename = (data.__typename || concreteType) as string;
+    if (this.rootNames[typename]) {
+      return typename;
     }
 
     let key: string | null = null;
-    if (this.keys[data.__typename]) {
-      key = this.keys[data.__typename](data) || null;
-    } else if (data.id != null) {
-      key = `${data.id}`;
+    const keyFunction: any =
+      typeof this.keys === 'function' ? this.keys : this.keys[typename];
+    if (keyFunction) {
+      key = keyFunction(data, typename) || null;
     } else if (data._id != null) {
       key = `${data._id}`;
+    } else if (data.id != null) {
+      key = `${data.id}`;
     }
 
-    const typename = data.__typename;
     const globalID =
       this.globalIDs === true ||
       (this.globalIDs && this.globalIDs.has(typename));

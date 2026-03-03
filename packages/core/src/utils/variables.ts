@@ -66,6 +66,33 @@ const extract = (map: FileMap, path: string, x: any): void => {
   }
 };
 
+const stableCopy = (value: any): any => {
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(stableCopy);
+  }
+
+  const keys = Object.keys(value).sort();
+  const stable: Record<string, any> = {};
+  for (let i = 0; i < keys.length; i++) {
+    const key = keys[i];
+    stable[key] = stableCopy(value[key]);
+  }
+
+  return stable;
+};
+
+const stringifyOptimized = (value: any): string => {
+  if (value === null) {
+    return 'null';
+  }
+
+  return JSON.stringify(stableCopy(value));
+};
+
 /** A stable stringifier for GraphQL variables objects.
  *
  * @param x - any JSON-like data.
@@ -82,7 +109,11 @@ const extract = (map: FileMap, path: string, x: any): void => {
  */
 export const stringifyVariables = (x: any, includeFiles?: boolean): string => {
   seen.clear();
-  return stringify(x, includeFiles || false);
+  if (includeFiles) {
+    return stringify(x, true);
+  }
+
+  return stringifyOptimized(x);
 };
 
 class NoopConstructor {}

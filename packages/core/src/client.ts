@@ -539,7 +539,6 @@ export const Client: new (opts: ClientOptions) => Client = function Client(
 
   let ids = 0;
 
-  const replays = new Map<number, OperationResult>();
   const active: Map<number, Source<OperationResult>> = new Map();
   const dispatched = new Set<number>();
   const queue: Operation[] = [];
@@ -661,13 +660,11 @@ export const Client: new (opts: ClientOptions) => Client = function Client(
           } else if (!result.hasNext) {
             dispatched.delete(operation.key);
           }
-          replays.set(operation.key, result);
         }),
         // Cleanup active states on end of source
         onEnd(() => {
           // Delete the active operation handle
           dispatched.delete(operation.key);
-          replays.delete(operation.key);
           active.delete(operation.key);
           // Interrupt active queue
           isOperationBatchActive = false;
@@ -775,25 +772,7 @@ export const Client: new (opts: ClientOptions) => Client = function Client(
             })
           );
 
-          const replay = replays.get(operation.key);
-          if (
-            operation.kind === 'query' &&
-            replay &&
-            (replay.stale || replay.hasNext)
-          ) {
-            return pipe(
-              merge([
-                source,
-                pipe(
-                  fromValue(replay),
-                  filter(replay => replay === replays.get(operation.key))
-                ),
-              ]),
-              switchMap(fromValue)
-            );
-          } else {
-            return source;
-          }
+          return source;
         })
       );
     },

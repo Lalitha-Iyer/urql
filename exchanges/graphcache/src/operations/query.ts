@@ -82,7 +82,8 @@ export const _query = (
   store: Store,
   request: OperationRequest,
   input?: Data | null | undefined,
-  error?: CombinedError | undefined
+  error?: CombinedError | undefined,
+  operationContext?: { partialPolicy?: boolean }
 ): QueryResult => {
   const query = formatDocument(request.query);
   const operation = getMainOperation(query);
@@ -97,6 +98,8 @@ export const _query = (
     rootKey,
     error
   );
+  ctx.partialPolicy =
+    operationContext !== undefined ? operationContext.partialPolicy : undefined;
 
   if (process.env.NODE_ENV !== 'production') {
     pushDebugNode(rootKey, operation);
@@ -118,7 +121,7 @@ export const _query = (
 
   if (process.env.NODE_ENV !== 'production') {
     popDebugNode();
-    InMemoryData.getCurrentDependencies();
+    if (InMemoryData.currentDependencies !== null) InMemoryData.getCurrentDependencies();
   }
 
   return {
@@ -410,7 +413,13 @@ const readSelection = (
     const directives = getDirectives(node);
     const resolver = getFieldResolver(directives, typename, fieldName, ctx);
     const fieldKey = keyOfField(fieldName, fieldArgs);
-    const key = joinKeys(entityKey, fieldKey);
+    let key = joinKeys(entityKey, fieldKey);
+    if (process.env.URQL_EXPLORER === 'true') {
+      const link = InMemoryData.readLink(entityKey, fieldKey);
+      if (link) {
+        key = link as string;
+      }
+    }
     const fieldValue = InMemoryData.readRecord(entityKey, fieldKey);
     const resultValue = result ? result[fieldName] : undefined;
 
@@ -531,7 +540,8 @@ const readSelection = (
     if (
       !deferRef &&
       dataFieldValue === undefined &&
-      (directives.optional ||
+      (ctx.partialPolicy ||
+        directives.optional ||
         (optionalRef && !directives.required) ||
         !!getFieldError(ctx) ||
         (!directives.required &&
@@ -567,6 +577,16 @@ const readSelection = (
     // Check for any referential changes in the field's value
     hasChanged = hasChanged || dataFieldValue !== input[fieldAlias];
     if (dataFieldValue !== undefined) {
+      if (
+        typeof dataFieldValue === 'object' &&
+        dataFieldValue !== null &&
+        !(dataFieldValue as any).parentVars
+      ) {
+        Object.defineProperty(dataFieldValue, 'parentVars', {
+          value: ctx.variables,
+          enumerable: false,
+        });
+      }
       output[fieldAlias] = dataFieldValue;
     } else if (deferRef) {
       hasNext = true;

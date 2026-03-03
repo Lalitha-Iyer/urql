@@ -8,27 +8,22 @@ import type {
 import { Kind } from '@0no-co/graphql.web';
 
 import type { SelectionSet } from '../ast';
-import {
-  isDeferred,
-  getTypeCondition,
-  getSelectionSet,
-  getName,
-  isOptional,
-} from '../ast';
+import { getTypeCondition, getSelectionSet, getName, isOptional } from '../ast';
 
 import { warn, pushDebugNode, popDebugNode } from '../helpers/help';
 import {
-  hasField,
   currentOperation,
   currentOptimistic,
-  writeConcreteType,
-  getConcreteTypes,
-  isSeenConcreteType,
+  writeAbstractType,
 } from '../store/data';
-import { keyOfField } from '../store/keys';
 import type { Store } from '../store/store';
 
-import { getFieldArguments, shouldInclude, isInterfaceOfType } from '../ast';
+import {
+  getFieldArguments,
+  shouldInclude,
+  isInterfaceOfType,
+  isInterfaceOfTypeRelay,
+} from '../ast';
 
 import type {
   Fragments,
@@ -38,7 +33,6 @@ import type {
   Link,
   Entity,
   Data,
-  Logger,
 } from '../types';
 
 export interface Context {
@@ -52,6 +46,7 @@ export interface Context {
   fieldName: string;
   error: ErrorLike | undefined;
   partial: boolean;
+  partialPolicy?: boolean;
   hasNext: boolean;
   optimistic: boolean;
   __internal: {
@@ -128,39 +123,6 @@ export const updateContext = (
   ctx.error = getFieldError(ctx);
 };
 
-const isFragmentHeuristicallyMatching = (
-  node: FormattedNode<InlineFragmentNode | FragmentDefinitionNode>,
-  typename: void | string,
-  entityKey: string,
-  vars: Variables,
-  logger?: Logger
-) => {
-  if (!typename) return false;
-  const typeCondition = getTypeCondition(node);
-  if (!typeCondition || typename === typeCondition) return true;
-
-  warn(
-    'Heuristic Fragment Matching: A fragment is trying to match against the `' +
-      typename +
-      '` type, ' +
-      'but the type condition is `' +
-      typeCondition +
-      '`. Since GraphQL allows for interfaces `' +
-      typeCondition +
-      '` may be an ' +
-      'interface.\nA schema needs to be defined for this match to be deterministic, ' +
-      'otherwise the fragment will be matched heuristically!',
-    16,
-    logger
-  );
-
-  return !getSelectionSet(node).some(node => {
-    if (node.kind !== Kind.FIELD) return false;
-    const fieldKey = keyOfField(getName(node), getFieldArguments(node, vars));
-    return !hasField(entityKey, fieldKey);
-  });
-};
-
 export class SelectionIterator {
   typename: undefined | string;
   entityKey: string;
@@ -212,7 +174,7 @@ export class SelectionIterator {
     ];
   }
 
-  next(): FormattedNode<FieldNode> | undefined {
+  next(data?: Data): FormattedNode<FieldNode> | undefined {
     while (this.stack.length > 0) {
       let state = this.stack[this.stack.length - 1];
       while (state.index < state.selectionSet.length) {
@@ -234,47 +196,56 @@ export class SelectionIterator {
                     fragment,
                     this.typename
                   )
-                : this.ctx.store.possibleTypeMap
-                  ? isSuperType(
-                      this.ctx.store.possibleTypeMap,
-                      fragment.typeCondition.name.value,
-                      this.typename
-                    )
-                  : (currentOperation === 'read' &&
-                      isFragmentMatching(
-                        fragment.typeCondition.name.value,
-                        this.typename
-                      )) ||
-                    isFragmentHeuristicallyMatching(
-                      fragment,
-                      this.typename,
-                      this.entityKey,
-                      this.ctx.variables,
-                      this.ctx.store.logger
-                    ));
+                : currentOperation === 'read' &&
+                  isFragmentMatching(
+                    fragment.typeCondition.name.value,
+                    this.typename
+                  ));
+
+            const isAbstractFragment =
+              currentOperation === 'write' &&
+              !this.ctx.store.schema &&
+              fragment.typeCondition &&
+              fragment.typeCondition.name.value.indexOf('__is') === 0;
+
+            let implementsInterface = false;
+            if (isAbstractFragment && data && this.typename) {
+              const typeConditionName = fragment.typeCondition!.name.value;
+              implementsInterface = Object.prototype.hasOwnProperty.call(
+                data,
+                typeConditionName
+              );
+
+              if (implementsInterface) {
+                writeAbstractType(typeConditionName, this.typename, true);
+              } else {
+                const currentVal = this.ctx.store.resolve(
+                  `client:__type:${this.typename}`,
+                  typeConditionName
+                );
+                if (currentVal === true) {
+                  implementsInterface = true;
+                } else {
+                  writeAbstractType(typeConditionName, this.typename, false);
+                }
+              }
+            }
+
             if (
               isMatching ||
-              (currentOperation === 'write' && !this.ctx.store.schema)
+              (currentOperation === 'write' &&
+                !this.ctx.store.schema &&
+                !(isAbstractFragment && !implementsInterface))
             ) {
               if (process.env.NODE_ENV !== 'production')
                 pushDebugNode(this.typename, fragment);
               const isFragmentOptional = isOptional(select);
-              if (
-                isMatching &&
-                fragment.typeCondition &&
-                this.typename !== fragment.typeCondition.name.value
-              ) {
-                writeConcreteType(
-                  fragment.typeCondition.name.value,
-                  this.typename!
-                );
-              }
 
               this.stack.push(
                 (state = {
                   selectionSet: getSelectionSet(fragment),
                   index: 0,
-                  defer: state.defer || isDeferred(select, this.ctx.variables),
+                  defer: state.defer,
                   optional:
                     isFragmentOptional !== undefined
                       ? isFragmentOptional
@@ -313,11 +284,9 @@ const isFragmentMatching = (typeCondition: string, typename: string | void) => {
   if (!typename) return false;
   if (typeCondition === typename) return true;
 
-  const isProbableAbstractType = !isSeenConcreteType(typeCondition);
-  if (!isProbableAbstractType) return false;
-
-  const types = getConcreteTypes(typeCondition);
-  return types.size && types.has(typename);
+  if (isInterfaceOfTypeRelay(typeCondition, typename)) {
+    return true;
+  }
 };
 
 export const ensureData = (x: DataField): Data | NullArray<Data> | null =>

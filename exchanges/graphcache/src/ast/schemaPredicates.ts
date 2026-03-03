@@ -6,6 +6,7 @@ import type {
 import { warn, invariant } from '../helpers/help';
 import { getTypeCondition } from './node';
 import type { SchemaIntrospector, SchemaObject } from './schema';
+import { readRecord } from '../store/data';
 
 import type {
   KeyingConfig,
@@ -69,6 +70,25 @@ export const isInterfaceOfType = (
   expectAbstractType(schema, typeCondition!);
   expectObjectType(schema, typename!);
   return schema.isSubType(typeCondition, typename);
+};
+
+export const isInterfaceOfTypeRelay = (
+  abstractType: string,
+  typename: string | void
+): boolean => {
+  if (!abstractType || !typename || !(abstractType.indexOf('__is') > -1)) {
+    return false;
+  }
+
+  const implementsInterface = readRecord(
+    `client:__type:${typename}`,
+    abstractType
+  );
+  if (implementsInterface === null || implementsInterface === undefined) {
+    return true;
+  }
+
+  return implementsInterface as boolean;
 };
 
 const getField = (

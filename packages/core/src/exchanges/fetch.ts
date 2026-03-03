@@ -26,80 +26,100 @@ import {
  *
  * @see {@link makeFetchSource} for the shared utility calling the Fetch API.
  */
-export const fetchExchange: Exchange = ({ forward, dispatchDebug }) => {
-  return ops$ => {
-    const fetchResults$ = pipe(
-      ops$,
-      filter(operation => {
-        return (
-          operation.kind !== 'teardown' &&
-          (operation.kind !== 'subscription' ||
-            !!operation.context.fetchSubscriptions)
-        );
-      }),
-      mergeMap(operation => {
-        const body = makeFetchBody(operation);
-        const url = makeFetchURL(operation, body);
-        const fetchOptions = makeFetchOptions(operation, body);
+type FetchExchangeFactoryArgs = {
+  makeFetchBody?: typeof import('../internal').makeFetchBody;
+};
 
-        dispatchDebug({
-          type: 'fetchRequest',
-          message: 'A fetch request is being executed.',
-          operation,
-          data: {
-            url,
-            fetchOptions,
-          },
-        });
-
-        const source = pipe(
-          makeFetchSource(operation, url, fetchOptions),
-          takeUntil(
-            pipe(
-              ops$,
-              filter(op => op.kind === 'teardown' && op.key === operation.key)
-            )
-          )
-        );
-
-        if (process.env.NODE_ENV !== 'production') {
-          return pipe(
-            source,
-            onPush(result => {
-              const error = !result.data ? result.error : undefined;
-
-              dispatchDebug({
-                type: error ? 'fetchError' : 'fetchSuccess',
-                message: `A ${
-                  error ? 'failed' : 'successful'
-                } fetch response has been returned.`,
-                operation,
-                data: {
-                  url,
-                  fetchOptions,
-                  value: error || result,
-                },
-              });
-            })
+export const createFetchExchange = ({
+  makeFetchBody: customMakeFetchBody,
+}: FetchExchangeFactoryArgs = {}): Exchange => {
+  return ({ forward, dispatchDebug }) => {
+    return ops$ => {
+      const fetchResults$ = pipe(
+        ops$,
+        filter(operation => {
+          return (
+            operation.kind !== 'teardown' &&
+            (operation.kind !== 'subscription' ||
+              !!operation.context.fetchSubscriptions)
           );
-        }
+        }),
+        mergeMap(operation => {
+          const body = customMakeFetchBody
+            ? customMakeFetchBody(operation)
+            : makeFetchBody(operation);
+          const url = makeFetchURL(operation, body);
+          const fetchOptions = makeFetchOptions(operation, body);
 
-        return source;
-      })
-    );
+          dispatchDebug({
+            type: 'fetchRequest',
+            message: 'A fetch request is being executed.',
+            operation,
+            data: {
+              url,
+              fetchOptions,
+            },
+          });
 
-    const forward$ = pipe(
-      ops$,
-      filter(operation => {
-        return (
-          operation.kind === 'teardown' ||
-          (operation.kind === 'subscription' &&
-            !operation.context.fetchSubscriptions)
-        );
-      }),
-      forward
-    );
+          const source = pipe(
+            makeFetchSource(operation, url, fetchOptions),
+            takeUntil(
+              pipe(
+                ops$,
+                filter(op => op.kind === 'teardown' && op.key === operation.key)
+              )
+            )
+          );
 
-    return merge([fetchResults$, forward$]);
+          if (process.env.NODE_ENV !== 'production') {
+            return pipe(
+              source,
+              onPush(result => {
+                const error = !result.data ? result.error : undefined;
+
+                dispatchDebug({
+                  type: error ? 'fetchError' : 'fetchSuccess',
+                  message: `A ${
+                    error ? 'failed' : 'successful'
+                  } fetch response has been returned.`,
+                  operation,
+                  data: {
+                    url,
+                    fetchOptions,
+                    value: error || result,
+                  },
+                });
+              })
+            );
+          }
+
+          return source;
+        })
+      );
+
+      const forward$ = pipe(
+        ops$,
+        filter(operation => {
+          return (
+            operation.kind === 'teardown' ||
+            (operation.kind === 'subscription' &&
+              !operation.context.fetchSubscriptions)
+          );
+        }),
+        forward
+      );
+
+      return merge([fetchResults$, forward$]);
+    };
   };
 };
+
+const defaultFetchExchange = createFetchExchange();
+
+export const fetchExchange: Exchange = ((arg: any) => {
+  if (arg && typeof arg.forward === 'function') {
+    return defaultFetchExchange(arg);
+  }
+
+  return createFetchExchange(arg);
+}) as Exchange;
